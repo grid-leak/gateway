@@ -4,8 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+hyper = "1.7.0"
 jsonrpsee = { version = "0.26.0", features = ["server"] }
 jsonrpsee-proc-macros = "0.26.0"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 tokio = { version = "1.47.1", features = ["full"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.6", features = ["cors", "compression-full", "sensitive-headers", "trace", "timeout"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
