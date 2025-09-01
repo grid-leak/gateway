@@ -11,7 +11,8 @@ use tracing_subscriber::EnvFilter;
 
 mod methods;
 mod middleware;
-mod types;
+mod schema;
+mod models;
 
 use crate::{
     methods::{

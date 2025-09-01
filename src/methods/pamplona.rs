@@ -1,7 +1,7 @@
 use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee_proc_macros::rpc;
 
-use crate::types::{GetPlayerTagResponse, Tag, TagData};
+use crate::models::{GetPlayerTagResponse, Tag, TagData};
 
 #[rpc(server, namespace = "Pamplona", namespace_separator = ".")]
 pub trait Pamplona {

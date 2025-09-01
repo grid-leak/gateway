@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+diesel = { version = "2.2.12", features = ["postgres", "serde_json", "uuid"] }
+dotenvy = "0.15.7"
 hyper = "1.7.0"
 jsonrpsee = { version = "0.26.0", features = ["server"] }
 jsonrpsee-proc-macros = "0.26.0"
@@ -14,3 +16,4 @@ tower = "0.5.2"
 tower-http = { version = "0.6.6", features = ["cors", "compression-full", "sensitive-headers", "trace", "timeout"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+uuid = "1.18.0"

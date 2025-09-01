@@ -1,7 +1,7 @@
 use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee_proc_macros::rpc;
 
-use crate::types::Friend;
+use crate::models::Friend;
 
 #[rpc(server, namespace = "PamplonaAuthenticated", namespace_separator = ".")]
 pub trait PamplonaAuthenticated {
