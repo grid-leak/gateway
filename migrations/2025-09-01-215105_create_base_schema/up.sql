@@ -1,17 +1,17 @@
 -- Your SQL goes here
+CREATE TABLE "users"(
+	"id" BIGINT NOT NULL PRIMARY KEY,
+	"name" TEXT NOT NULL,
+	"division_name" SMALLINT NOT NULL,
+	"division_rank" SMALLINT NOT NULL
+);
+
 CREATE TABLE "challenge_bookmarks"(
 	"user_id" BIGINT NOT NULL,
 	"challenge_id" UUID NOT NULL,
 	"bookmark_time" TIMESTAMP NOT NULL,
 	PRIMARY KEY("user_id", "challenge_id"),
 	FOREIGN KEY ("user_id") REFERENCES "users"("id")
-);
-
-CREATE TABLE "users"(
-	"id" BIGINT NOT NULL PRIMARY KEY,
-	"name" TEXT NOT NULL,
-	"division_name" SMALLINT NOT NULL,
-	"division_rank" SMALLINT NOT NULL
 );
 
 CREATE TABLE "ugcs"(

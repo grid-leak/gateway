@@ -1,5 +1,8 @@
+use dotenvy::dotenv;
+use gateway::establish_db_connection;
 use hyper::body::Bytes;
 use jsonrpsee::{RpcModule, core::middleware::RpcServiceBuilder, server::Server};
+use tracing::info;
 use std::{error::Error, iter::once, net::SocketAddr, time::Duration};
 use tower_http::{
     LatencyUnit,
@@ -11,8 +14,8 @@ use tracing_subscriber::EnvFilter;
 
 mod methods;
 mod middleware;
-mod schema;
 mod models;
+mod schema;
 
 use crate::{
     methods::{
@@ -25,8 +28,24 @@ use crate::{
     },
 };
 
+use self::models::*;
+use diesel::prelude::*;
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    use self::schema::users::dsl::*;
+
+    // Load environment variables
+    dotenv().ok();
+
+    let connection = &mut establish_db_connection();
+    let results = users
+        .select(User::as_select())
+        .load(connection)
+        .expect("Error loading users");
+
+    info!("Loaded {} users", results.len());
+
     // Set up logging based on the environment filter
     tracing_subscriber::FmtSubscriber::builder()
         // .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
