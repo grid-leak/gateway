@@ -1,9 +1,8 @@
 use dotenvy::dotenv;
-use gateway::establish_db_connection;
 use hyper::body::Bytes;
 use jsonrpsee::{RpcModule, core::middleware::RpcServiceBuilder, server::Server};
-use tracing::info;
-use std::{error::Error, iter::once, net::SocketAddr, time::Duration};
+use sea_orm::Database;
+use std::{env, error::Error, iter::once, net::SocketAddr, sync::Arc, time::Duration};
 use tower_http::{
     LatencyUnit,
     compression::CompressionLayer,
@@ -12,39 +11,25 @@ use tower_http::{
 };
 use tracing_subscriber::EnvFilter;
 
+mod context;
+mod entities;
 mod methods;
 mod middleware;
 mod models;
-mod schema;
 
 use crate::{
-    methods::{
-        pamplona::{PamplonaImpl, PamplonaServer},
-        pamplona_authenticated::{PamplonaAuthenticatedImpl, PamplonaAuthenticatedServer},
-    },
+    context::GatewayContext,
+    methods::pamplona::{PamplonaImpl, PamplonaServer},
     middleware::{
         http::{GATEWAY_SESSION_HEADER, HttpMiddlewareLayer},
         rpc::RpcMiddlewareLayer,
     },
 };
 
-use self::models::*;
-use diesel::prelude::*;
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    use self::schema::users::dsl::*;
-
     // Load environment variables
     dotenv().ok();
-
-    let connection = &mut establish_db_connection();
-    let results = users
-        .select(User::as_select())
-        .load(connection)
-        .expect("Error loading users");
-
-    info!("Loaded {} users", results.len());
 
     // Set up logging based on the environment filter
     tracing_subscriber::FmtSubscriber::builder()
@@ -52,6 +37,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_env_filter(EnvFilter::new("debug"))
         .try_init()
         .expect("setting default subscriber failed");
+
+    let db =
+        &Database::connect(env::var("DATABASE_URL").expect("DATABASE_URL must be set")).await?;
+
+    // Synchronize database schema with entity definitions
+    db.get_schema_registry("gateway::entities::*")
+        .sync(db)
+        .await?;
 
     let addr = "127.0.0.1:3000".parse::<SocketAddr>().unwrap();
 
@@ -83,12 +76,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build(addr)
         .await?;
 
-    // TODO: add a database connection pool to the Context
-    // Context is shared across all connections and requests,
-    // making it suitable for a global state like this
-    let mut methods = RpcModule::new(());
-    methods.merge(PamplonaAuthenticatedImpl.into_rpc())?;
-    methods.merge(PamplonaImpl.into_rpc())?;
+    // In my understanding, the RpcModule context can only be used by
+    // the methods registered directly via `register_method`, or `register_async_method`
+    // So we will have to pass the context to the impls directly
+    let mut methods: RpcModule<()> = RpcModule::new(());
+
+    let context = Arc::new(GatewayContext::new());
+
+    let pamplona_impl = PamplonaImpl::new(context.clone());
+    methods.merge(pamplona_impl.into_rpc())?;
+
+    // let pamplona_auth_impl = PamplonaAuthenticatedImpl::new(context.clone());
+    // methods.merge(pamplona_auth_ipml.into_rpc())?;
 
     let handle = server.start(methods);
     handle.stopped().await;
