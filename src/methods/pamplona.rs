@@ -29,8 +29,6 @@ impl PamplonaImpl {
 #[async_trait]
 impl PamplonaServer for PamplonaImpl {
     async fn get_player_tag(&self, persona_id: String) -> RpcResult<PlayerTagResponse> {
-        self.ctx.append(1);
-
         Ok(PlayerTagResponse {
             persona_id: persona_id.clone(),
             tag_data: TagData {

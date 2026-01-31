@@ -9,7 +9,6 @@ use tower_http::{
     sensitive_headers::SetSensitiveRequestHeadersLayer,
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
 };
-use tracing_subscriber::EnvFilter;
 
 mod context;
 mod entities;
@@ -19,7 +18,11 @@ mod models;
 
 use crate::{
     context::GatewayContext,
-    methods::pamplona::{PamplonaImpl, PamplonaServer},
+    methods::{
+        auth::{BeatAuthenticationImpl, BeatAuthenticationServer},
+        pamplona::{PamplonaImpl, PamplonaServer},
+        pamplona_authenticated::PamplonaAuthenticatedImpl,
+    },
     middleware::{
         http::{GATEWAY_SESSION_HEADER, HttpMiddlewareLayer},
         rpc::RpcMiddlewareLayer,
@@ -33,17 +36,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Set up logging based on the environment filter
     tracing_subscriber::FmtSubscriber::builder()
-        // .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
-        .with_env_filter(EnvFilter::new("debug"))
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init()
         .expect("setting default subscriber failed");
 
-    let db =
-        &Database::connect(env::var("DATABASE_URL").expect("DATABASE_URL must be set")).await?;
+    let db = Database::connect(env::var("DATABASE_URL").expect("DATABASE_URL must be set")).await?;
 
     // Synchronize database schema with entity definitions
     db.get_schema_registry("gateway::entities::*")
-        .sync(db)
+        .sync(&db)
         .await?;
 
     let addr = "127.0.0.1:3000".parse::<SocketAddr>().unwrap();
@@ -68,7 +69,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .layer(CompressionLayer::new())
         .layer(trace_layer);
 
-    let rpc_middleware = RpcServiceBuilder::new().layer(RpcMiddlewareLayer);
+    // The context will be shared between the RPC methods and the RPC middleware
+    let context = Arc::new(GatewayContext::new(db.clone()));
+
+    let rpc_middleware = RpcServiceBuilder::new().layer(RpcMiddlewareLayer::new(context.clone()));
 
     let server = Server::builder()
         .set_http_middleware(service_builder)
@@ -76,18 +80,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build(addr)
         .await?;
 
-    // In my understanding, the RpcModule context can only be used by
-    // the methods registered directly via `register_method`, or `register_async_method`
-    // So we will have to pass the context to the impls directly
     let mut methods: RpcModule<()> = RpcModule::new(());
-
-    let context = Arc::new(GatewayContext::new());
 
     let pamplona_impl = PamplonaImpl::new(context.clone());
     methods.merge(pamplona_impl.into_rpc())?;
 
-    // let pamplona_auth_impl = PamplonaAuthenticatedImpl::new(context.clone());
-    // methods.merge(pamplona_auth_ipml.into_rpc())?;
+    let auth_impl = BeatAuthenticationImpl::new(context.clone());
+    methods.merge(auth_impl.into_rpc())?;
+
+    let pamplona_auth_impl = PamplonaAuthenticatedImpl::new(context.clone());
+    methods.merge(pamplona_auth_impl.into_rpc())?;
 
     let handle = server.start(methods);
     handle.stopped().await;

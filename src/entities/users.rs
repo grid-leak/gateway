@@ -9,6 +9,10 @@ pub struct Model {
     pub name: String,
     #[sea_orm(column_type = "JsonBinary", default = "'{}'")]
     pub stats: Json,
+    #[sea_orm(default = "'Copper'")]
+    pub division_name: String,
+    #[sea_orm(default = "5")]
+    pub division_rank: i32,
     #[sea_orm(has_many, from = "id", to = "persona_id")]
     pub ugcs: HasMany<super::ugc::Entity>,
 }

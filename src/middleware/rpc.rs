@@ -1,3 +1,6 @@
+use std::future::Future;
+use std::sync::Arc;
+
 use jsonrpsee::{
     MethodResponse,
     core::middleware::{ResponseFuture, RpcServiceT},
@@ -5,10 +8,18 @@ use jsonrpsee::{
 };
 use tower::Layer;
 
-use crate::middleware::http::SessionType;
+use crate::{context::GatewayContext, middleware::http::SessionType};
 
 #[derive(Clone)]
-pub struct RpcMiddlewareLayer;
+pub struct RpcMiddlewareLayer {
+    ctx: Arc<GatewayContext>,
+}
+
+impl RpcMiddlewareLayer {
+    pub fn new(ctx: Arc<GatewayContext>) -> Self {
+        Self { ctx }
+    }
+}
 
 impl<S> Layer<S> for RpcMiddlewareLayer
 where
@@ -17,12 +28,12 @@ where
     type Service = RpcMiddleware<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        RpcMiddleware(inner)
+        RpcMiddleware(inner, self.ctx.clone())
     }
 }
 
 #[derive(Clone)]
-pub struct RpcMiddleware<S>(S);
+pub struct RpcMiddleware<S>(S, Arc<GatewayContext>);
 impl<S> RpcServiceT for RpcMiddleware<S>
 where
     S: RpcServiceT<
@@ -49,21 +60,26 @@ where
         &self,
         request: jsonrpsee::types::Request<'a>,
     ) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
-        if request.method_name().starts_with("PamplonaAuthenticated") {
-            let session = request.extensions.get::<SessionType>().unwrap();
+        println!("Received {}", request.method_name());
 
-            match session {
-                SessionType::Identified(_session_id) => {
-                    // TODO: check session_id against a list of authorized sessions
-                    ResponseFuture::future(self.0.call(request))
+        if request.method_name().starts_with("PamplonaAuthenticated") {
+            let session_type = request.extensions.get::<SessionType>().unwrap();
+            let ctx = &self.1;
+
+            match session_type {
+                SessionType::Identified(session_id) => {
+                    if ctx.get_persona_id(session_id).is_some() {
+                        ResponseFuture::future(self.0.call(request))
+                    } else {
+                        ResponseFuture::ready(MethodResponse::error(
+                            request.id,
+                            ErrorObject::borrowed(-32501, "Invalid Params: no valid session", None),
+                        ))
+                    }
                 }
                 SessionType::Unknown => ResponseFuture::ready(MethodResponse::error(
                     request.id,
-                    // TODO: implement custom error codes from the game
-                    // and find the one that is responsible for this
-                    // so the game can show the correct error message
-                    // or re-authenticate if possible
-                    ErrorObject::borrowed(-32000, "Unauthorized.", None),
+                    ErrorObject::borrowed(-32501, "Invalid Params: no valid session", None),
                 )),
             }
         } else {

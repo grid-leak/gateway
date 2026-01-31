@@ -1,22 +1,52 @@
+use sea_orm::DatabaseConnection;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-use tracing::info;
+const SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
+
+#[derive(Clone)]
+struct Session {
+    persona_id: i32,
+    created_at: Instant,
+}
 
 #[derive(Clone)]
 pub struct GatewayContext {
-    pub counter: Arc<Mutex<u64>>,
+    db: DatabaseConnection,
+    sessions: Arc<Mutex<HashMap<String, Session>>>,
 }
 
 impl GatewayContext {
-    pub fn new() -> Self {
+    pub fn new(db: DatabaseConnection) -> Self {
         Self {
-            counter: Arc::new(Mutex::new(0)),
+            db,
+            sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    pub fn append(&self, value: u64) {
-        let mut counter = self.counter.lock().unwrap();
-        *counter += value;
-        info!("counter: {}", *counter);
+    // TODO: explore switching to "services", eg. find_user, find_ugc, etc
+    pub fn db(&self) -> &DatabaseConnection {
+        &self.db
+    }
+
+    pub fn register_session(&self, session_id: String, persona_id: i32) {
+        let mut sessions = self.sessions.lock().unwrap();
+        let session = Session {
+            persona_id,
+            created_at: Instant::now(),
+        };
+        sessions.insert(session_id, session);
+    }
+
+    pub fn get_persona_id(&self, session_id: &str) -> Option<i32> {
+        let mut sessions = self.sessions.lock().unwrap();
+        if let Some(session) = sessions.get(session_id) {
+            if session.created_at.elapsed() < SESSION_LIFETIME {
+                return Some(session.persona_id);
+            }
+        }
+        sessions.remove(session_id);
+        None
     }
 }
