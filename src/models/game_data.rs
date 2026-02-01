@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub const LEVEL_ID_HASH: i32 = djb_hash("SP_MainCity");
 
-pub const fn djb_hash(s: &str) -> i32 {
+const fn djb_hash(s: &str) -> i32 {
     let mut hash: u32 = 5381;
     let bytes = s.as_bytes();
     let mut i = 0;

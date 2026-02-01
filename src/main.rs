@@ -12,6 +12,7 @@ use tower_http::{
 
 mod context;
 mod entities;
+mod logic;
 mod methods;
 mod middleware;
 mod models;
@@ -19,9 +20,9 @@ mod models;
 use crate::{
     context::GatewayContext,
     methods::{
-        auth::{BeatAuthenticationImpl, BeatAuthenticationServer},
+        auth::{AuthenticationImpl, AuthenticationServer},
         pamplona::{PamplonaImpl, PamplonaServer},
-        pamplona_authenticated::PamplonaAuthenticatedImpl,
+        pamplona_authenticated::{PamplonaAuthenticatedImpl, PamplonaAuthenticatedServer},
     },
     middleware::{
         http::{GATEWAY_SESSION_HEADER, HttpMiddlewareLayer},
@@ -85,7 +86,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let pamplona_impl = PamplonaImpl::new(context.clone());
     methods.merge(pamplona_impl.into_rpc())?;
 
-    let auth_impl = BeatAuthenticationImpl::new(context.clone());
+    let auth_impl = AuthenticationImpl::new(context.clone());
     methods.merge(auth_impl.into_rpc())?;
 
     let pamplona_auth_impl = PamplonaAuthenticatedImpl::new(context.clone());

@@ -58,7 +58,7 @@ where
 
     fn call<'a>(
         &self,
-        request: jsonrpsee::types::Request<'a>,
+        mut request: jsonrpsee::types::Request<'a>,
     ) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
         println!("Received {}", request.method_name());
 
@@ -68,7 +68,8 @@ where
 
             match session_type {
                 SessionType::Identified(session_id) => {
-                    if ctx.get_persona_id(session_id).is_some() {
+                    if let Some(persona_id) = ctx.get_persona_id(session_id) {
+                        request.extensions.insert(persona_id);
                         ResponseFuture::future(self.0.call(request))
                     } else {
                         ResponseFuture::ready(MethodResponse::error(

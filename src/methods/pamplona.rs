@@ -5,15 +5,26 @@ use jsonrpsee_proc_macros::rpc;
 
 use crate::{
     context::GatewayContext,
-    models::social::{PlayerTagResponse, TagData, TagItem},
+    logic::challenge::get_runnersroute_data,
+    methods::map_err,
+    models::{
+        challenge::RunnersRouteDataResponse,
+        social::{PlayerTagResponse, TagData, TagItem},
+    },
 };
 
 #[rpc(server, namespace = "Pamplona", namespace_separator = ".")]
 pub trait Pamplona {
     #[method(name = "getPlayerTag")]
     async fn get_player_tag(&self, persona_id: String) -> RpcResult<PlayerTagResponse>;
-    // #[method(name = "getPlayerInfo")]
-    // async fn get_player_info(&self, persona_id: String) -> RpcResult<GetPlayerInfoResponse>;
+
+    #[method(name = "getRunnersRouteData")]
+    async fn get_runners_route_data(
+        &self,
+        challenge_ids: Vec<String>,
+        data_types: Vec<String>,
+        persona_id: String,
+    ) -> RpcResult<Vec<RunnersRouteDataResponse>>;
 }
 
 pub struct PamplonaImpl {
@@ -45,7 +56,26 @@ impl PamplonaServer for PamplonaImpl {
         })
     }
 
-    // async fn get_player_info(&self, persona_id: String) -> RpcResult<GetPlayerInfoResponse> {
-    //     self.
-    // }
+    async fn get_runners_route_data(
+        &self,
+        challenge_ids: Vec<String>,
+        data_types: Vec<String>,
+        persona_id: String,
+    ) -> RpcResult<Vec<RunnersRouteDataResponse>> {
+        let pid = persona_id.parse::<i32>().ok();
+
+        if pid.is_none() {
+            return Err(jsonrpsee::types::ErrorObject::owned(
+                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                "Invalid persona id",
+                None::<()>,
+            ));
+        }
+
+        let pid = pid.unwrap();
+
+        get_runnersroute_data(&self.ctx, challenge_ids, data_types, pid)
+            .await
+            .map_err(map_err)
+    }
 }

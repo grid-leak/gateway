@@ -5,26 +5,29 @@ use uuid::Uuid;
 use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee_proc_macros::rpc;
 
-use crate::{context::GatewayContext, entities::users, models::auth::AuthResponse};
+use crate::{
+    context::GatewayContext, entities::users, methods::map_err, models::auth::AuthResponse,
+};
 
-#[rpc(server, namespace = "BeatAuthentication", namespace_separator = ".")]
-pub trait BeatAuthentication {
+// TODO: web companion uses "BeatAuthentication", while the game uses "Authentication"
+#[rpc(server, namespace = "Authentication", namespace_separator = ".")]
+pub trait Authentication {
     #[method(name = "viaAuthCode")]
     async fn via_auth_code(&self, auth_code: String) -> RpcResult<AuthResponse>;
 }
 
-pub struct BeatAuthenticationImpl {
+pub struct AuthenticationImpl {
     ctx: Arc<GatewayContext>,
 }
 
-impl BeatAuthenticationImpl {
+impl AuthenticationImpl {
     pub fn new(ctx: Arc<GatewayContext>) -> Self {
         Self { ctx }
     }
 }
 
 #[async_trait]
-impl BeatAuthenticationServer for BeatAuthenticationImpl {
+impl AuthenticationServer for AuthenticationImpl {
     async fn via_auth_code(&self, _auth_code: String) -> RpcResult<AuthResponse> {
         // TODO: Implement actual auth code validation logic
         // For now, fetch the first user from the database
@@ -32,13 +35,7 @@ impl BeatAuthenticationServer for BeatAuthenticationImpl {
         let user_opt = users::Entity::find()
             .one(self.ctx.db())
             .await
-            .map_err(|e| {
-                jsonrpsee::types::ErrorObject::owned(
-                    jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                    e.to_string(),
-                    None::<()>,
-                )
-            })?;
+            .map_err(map_err)?;
 
         let persona_id = match user_opt {
             Some(user) => user.persona_id,
