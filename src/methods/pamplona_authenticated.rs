@@ -2,7 +2,10 @@ use crate::{
     context::GatewayContext,
     logic,
     methods::map_err,
-    models::{challenge::RunnersRouteDataResponse, game_data::InitialGameDataResponse},
+    models::{
+        challenge::RunnersRouteDataResponse, customization::GhostDataInput,
+        game_data::InitialGameDataResponse,
+    },
 };
 use jsonrpsee::{
     Extensions,
@@ -21,6 +24,8 @@ pub trait PamplonaAuthenticated {
         challenge_ids: Vec<String>,
         data_types: Vec<String>,
     ) -> RpcResult<Vec<RunnersRouteDataResponse>>;
+    #[method(name = "setPlayerGhost", with_extensions)]
+    async fn set_player_ghost(&self, ghost_data: GhostDataInput) -> RpcResult<String>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -50,8 +55,21 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         data_types: Vec<String>,
     ) -> RpcResult<Vec<RunnersRouteDataResponse>> {
         let persona_id = *extensions.get::<i32>().unwrap();
-        logic::challenge::get_runnersroute_data(&self.ctx, challenge_ids, data_types, persona_id)
+        logic::challenge::get_runners_route_data(&self.ctx, challenge_ids, data_types, persona_id)
             .await
             .map_err(map_err)
+    }
+
+    async fn set_player_ghost(
+        &self,
+        extensions: &Extensions,
+        ghost_data: GhostDataInput,
+    ) -> RpcResult<String> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::customization::set_player_ghost(&self.ctx, persona_id, ghost_data)
+            .await
+            .map_err(map_err)?;
+
+        Ok("success".to_string())
     }
 }

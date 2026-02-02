@@ -5,11 +5,11 @@ use jsonrpsee_proc_macros::rpc;
 
 use crate::{
     context::GatewayContext,
-    logic::challenge::get_runnersroute_data,
+    logic::challenge::get_runners_route_data,
     methods::map_err,
     models::{
         challenge::RunnersRouteDataResponse,
-        social::{PlayerTagResponse, TagData, TagItem},
+        customization::{PlayerGhost, PlayerTagResponse, TagData, TagItem},
     },
 };
 
@@ -25,6 +25,9 @@ pub trait Pamplona {
         data_types: Vec<String>,
         persona_id: String,
     ) -> RpcResult<Vec<RunnersRouteDataResponse>>;
+
+    #[method(name = "getPlayerGhosts")]
+    async fn get_player_ghosts(&self, persona_ids: Vec<i32>) -> RpcResult<Vec<PlayerGhost>>;
 }
 
 pub struct PamplonaImpl {
@@ -74,7 +77,13 @@ impl PamplonaServer for PamplonaImpl {
 
         let pid = pid.unwrap();
 
-        get_runnersroute_data(&self.ctx, challenge_ids, data_types, pid)
+        get_runners_route_data(&self.ctx, challenge_ids, data_types, pid)
+            .await
+            .map_err(map_err)
+    }
+
+    async fn get_player_ghosts(&self, persona_ids: Vec<i32>) -> RpcResult<Vec<PlayerGhost>> {
+        crate::logic::customization::get_player_ghosts(&self.ctx, persona_ids)
             .await
             .map_err(map_err)
     }

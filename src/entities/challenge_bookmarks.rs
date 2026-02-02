@@ -9,7 +9,7 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub challenge_id: String,
     pub challenge_type: String,
-    pub bookmark_time: i64,
+    pub bookmark_time: DateTimeUtc,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

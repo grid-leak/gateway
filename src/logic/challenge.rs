@@ -16,7 +16,7 @@ struct CountResult {
     count: i64,
 }
 
-pub async fn get_runnersroute_data(
+pub async fn get_runners_route_data(
     ctx: &Arc<GatewayContext>,
     challenge_ids: Vec<String>,
     _data_types: Vec<String>,
@@ -122,7 +122,7 @@ pub async fn get_runnersroute_data(
             let extra_stats = serde_json::from_value(entry.extra_stats.clone()).unwrap_or_default();
 
             user_stats = Some(UserStats {
-                finished_at: entry.created_at.and_utc().timestamp_millis().to_string(),
+                finished_at: entry.created_at.timestamp_millis().to_string(),
                 finish_time: entry.score.to_string(),
                 extra_stats,
                 run_id: entry.run_id.to_string(),

@@ -8,7 +8,7 @@ pub struct Model {
     pub user_id: i32,
     #[sea_orm(primary_key, auto_increment = false)]
     pub ugc_id: Uuid,
-    pub bookmark_time: i64,
+    pub bookmark_time: DateTimeUtc,
 }
 
 impl ActiveModelBehavior for ActiveModel {}

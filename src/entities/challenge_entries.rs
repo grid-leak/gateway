@@ -19,7 +19,7 @@ pub struct Model {
     pub run_id: i32,
     #[sea_orm(column_type = "JsonBinary", default = "'{}'")]
     pub extra_stats: Json,
-    pub created_at: DateTime,
+    pub created_at: DateTimeUtc,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
