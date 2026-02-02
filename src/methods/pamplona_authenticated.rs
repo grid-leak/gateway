@@ -3,7 +3,7 @@ use crate::{
     logic,
     methods::map_err,
     models::{
-        challenge::RunnersRouteDataResponse,
+        challenge::{HackableBillboardLeader, RunnersRouteDataResponse},
         customization::GhostDataInput,
         game_data::{InitialGameDataResponse, Inventory},
     },
@@ -13,6 +13,7 @@ use jsonrpsee::{
     core::{RpcResult, async_trait},
 };
 use jsonrpsee_proc_macros::rpc;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[rpc(server, namespace = "PamplonaAuthenticated", namespace_separator = ".")]
@@ -29,6 +30,12 @@ pub trait PamplonaAuthenticated {
         challenge_ids: Vec<String>,
         data_types: Vec<String>,
     ) -> RpcResult<Vec<RunnersRouteDataResponse>>;
+
+    #[method(name = "getHackableBillboardFriendsLeaders", with_extensions)]
+    async fn get_hackable_billboard_friends_leaders(
+        &self,
+        challenge_ids: Vec<String>,
+    ) -> RpcResult<HashMap<String, Option<HackableBillboardLeader>>>;
 
     #[method(name = "setPlayerGhost", with_extensions)]
     async fn set_player_ghost(&self, ghost_data: GhostDataInput) -> RpcResult<String>;
@@ -75,6 +82,16 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     ) -> RpcResult<Vec<RunnersRouteDataResponse>> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::challenge::get_runners_route_data(&self.ctx, challenge_ids, data_types, persona_id)
+            .await
+            .map_err(map_err)
+    }
+
+    async fn get_hackable_billboard_friends_leaders(
+        &self,
+        _extensions: &Extensions,
+        challenge_ids: Vec<String>,
+    ) -> RpcResult<HashMap<String, Option<HackableBillboardLeader>>> {
+        logic::challenge::get_hackable_billboard_friends_leaders(&self.ctx, challenge_ids)
             .await
             .map_err(map_err)
     }

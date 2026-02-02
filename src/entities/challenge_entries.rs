@@ -1,5 +1,9 @@
 use sea_orm::entity::prelude::*;
 
+// TODO: it might be better to split challenge entries
+// into `runners_route_entries` and `hackable_billboard_entries`
+// since they are too different, even though they share some similarities
+
 #[sea_orm::model]
 #[derive(Debug, Clone, DeriveEntityModel)]
 #[sea_orm(table_name = "challenge_entries")]

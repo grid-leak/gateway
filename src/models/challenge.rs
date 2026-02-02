@@ -26,3 +26,12 @@ pub struct UserRank {
     pub score: String,
     pub total: i64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HackableBillboardLeader {
+    pub position: i32,
+    pub score: String,
+    pub persona_id: String,
+    pub name: String,
+}

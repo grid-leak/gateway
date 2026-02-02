@@ -4,7 +4,8 @@ use crate::{
     models::challenge::{RunnersRouteDataResponse, UserRank, UserStats},
 };
 use sea_orm::{
-    ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter, QuerySelect,
+    ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter, QueryOrder,
+    QuerySelect,
     sea_query::{Alias, Expr, JoinType, PostgresQueryBuilder, Query},
 };
 use std::collections::HashMap;
@@ -147,4 +148,45 @@ pub async fn get_runners_route_data(
     }
 
     Ok(responses)
+}
+
+// TODO: revisit this after adding friends & followers system
+// currently it's global and returns the latest user that has an entry
+// which could potentially be more interesting than the original server
+pub async fn get_hackable_billboard_friends_leaders(
+    ctx: &Arc<GatewayContext>,
+    challenge_ids: Vec<String>,
+) -> Result<HashMap<String, Option<crate::models::challenge::HackableBillboardLeader>>, String> {
+    if challenge_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let db = ctx.db();
+    let mut response_map = HashMap::new();
+
+    for challenge_id in challenge_ids {
+        let entry_opt = challenge_entries::Entity::find()
+            .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
+            .order_by_desc(challenge_entries::Column::CreatedAt)
+            .find_also_related(crate::entities::users::Entity)
+            .one(db)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if let Some((entry, Some(user))) = entry_opt {
+            response_map.insert(
+                challenge_id,
+                Some(crate::models::challenge::HackableBillboardLeader {
+                    position: 1,
+                    score: entry.created_at.timestamp_millis().to_string(),
+                    persona_id: user.persona_id.to_string(),
+                    name: user.name,
+                }),
+            );
+        } else {
+            response_map.insert(challenge_id, None);
+        }
+    }
+
+    Ok(response_map)
 }
