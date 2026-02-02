@@ -9,14 +9,17 @@ use crate::{
     methods::map_err,
     models::{
         challenge::RunnersRouteDataResponse,
-        customization::{PlayerGhost, PlayerTagResponse, TagData, TagItem},
+        customization::{PlayerGhost, PlayerTagResponse, TagData},
     },
 };
 
 #[rpc(server, namespace = "Pamplona", namespace_separator = ".")]
 pub trait Pamplona {
+    #[method(name = "getPlayerTags")]
+    async fn get_player_tags(&self, persona_ids: Vec<String>) -> RpcResult<Vec<PlayerTagResponse>>;
+
     #[method(name = "getPlayerTag")]
-    async fn get_player_tag(&self, persona_id: String) -> RpcResult<PlayerTagResponse>;
+    async fn get_player_tag(&self, persona_id: String) -> RpcResult<TagData>;
 
     #[method(name = "getRunnersRouteData")]
     async fn get_runners_route_data(
@@ -42,21 +45,73 @@ impl PamplonaImpl {
 
 #[async_trait]
 impl PamplonaServer for PamplonaImpl {
-    async fn get_player_tag(&self, persona_id: String) -> RpcResult<PlayerTagResponse> {
-        Ok(PlayerTagResponse {
-            persona_id: persona_id.clone(),
-            tag_data: TagData {
-                frame: TagItem {
-                    tag: "2573550572".into(),
-                },
-                bg: TagItem {
-                    tag: "232356850".into(),
-                },
-                detail: TagItem {
-                    tag: "3420869487".into(),
-                },
-            },
-        })
+    async fn get_player_tags(&self, persona_ids: Vec<String>) -> RpcResult<Vec<PlayerTagResponse>> {
+        use crate::entities::users;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+        let persona_ids_int: Vec<i32> = persona_ids
+            .iter()
+            .filter_map(|id| id.parse::<i32>().ok())
+            .collect();
+
+        if persona_ids_int.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let users = users::Entity::find()
+            .filter(users::Column::PersonaId.is_in(persona_ids_int))
+            .all(self.ctx.db())
+            .await
+            .map_err(map_err)?;
+
+        let response = users
+            .into_iter()
+            .filter_map(|user| {
+                let tag_data: TagData = serde_json::from_value(user.tag_data).ok()?;
+
+                Some(PlayerTagResponse {
+                    persona_id: user.persona_id.to_string(),
+                    tag_data,
+                })
+            })
+            .collect();
+
+        Ok(response)
+    }
+
+    async fn get_player_tag(&self, persona_id: String) -> RpcResult<TagData> {
+        use crate::entities::users;
+        use sea_orm::EntityTrait;
+
+        let persona_id_int = persona_id.parse::<i32>().map_err(|_| {
+            jsonrpsee::types::ErrorObject::owned(
+                jsonrpsee::types::error::INVALID_PARAMS_CODE,
+                "Invalid persona_id",
+                None::<()>,
+            )
+        })?;
+
+        let user = users::Entity::find_by_id(persona_id_int)
+            .one(self.ctx.db())
+            .await
+            .map_err(map_err)?
+            .ok_or_else(|| {
+                jsonrpsee::types::ErrorObject::owned(
+                    jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                    "User not found",
+                    None::<()>,
+                )
+            })?;
+
+        let tag_data: TagData = serde_json::from_value(user.tag_data).map_err(|e| {
+            jsonrpsee::types::ErrorObject::owned(
+                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                format!("Failed to parse tag data: {}", e),
+                None::<()>,
+            )
+        })?;
+
+        Ok(tag_data)
     }
 
     async fn get_runners_route_data(

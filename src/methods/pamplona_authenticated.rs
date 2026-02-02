@@ -26,6 +26,11 @@ pub trait PamplonaAuthenticated {
     ) -> RpcResult<Vec<RunnersRouteDataResponse>>;
     #[method(name = "setPlayerGhost", with_extensions)]
     async fn set_player_ghost(&self, ghost_data: GhostDataInput) -> RpcResult<String>;
+    #[method(name = "setPlayerTag", with_extensions)]
+    async fn set_player_tag(
+        &self,
+        tag_data: crate::models::customization::TagData,
+    ) -> RpcResult<String>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -67,6 +72,19 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     ) -> RpcResult<String> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::customization::set_player_ghost(&self.ctx, persona_id, ghost_data)
+            .await
+            .map_err(map_err)?;
+
+        Ok("success".to_string())
+    }
+
+    async fn set_player_tag(
+        &self,
+        extensions: &Extensions,
+        tag_data: crate::models::customization::TagData,
+    ) -> RpcResult<String> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::customization::set_player_tag(&self.ctx, persona_id, tag_data)
             .await
             .map_err(map_err)?;
 

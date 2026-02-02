@@ -19,6 +19,8 @@ pub struct Model {
     pub ghost_timestamp: DateTimeUtc,
     #[sea_orm(has_many, from = "id", to = "persona_id")]
     pub ugcs: HasMany<super::ugc::Entity>,
+    #[sea_orm(column_type = "JsonBinary", default = "'{}'")]
+    pub tag_data: Json,
 }
 
 impl ActiveModelBehavior for ActiveModel {}
