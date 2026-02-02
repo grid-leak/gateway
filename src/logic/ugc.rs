@@ -7,13 +7,12 @@ use crate::{
     entities::{
         challenge_bookmarks,
         ugc::{self, UgcType},
-        ugc_bookmarks, user_items, user_kits, user_ugc_flags, users,
+        ugc_bookmarks, user_ugc_flags, users,
     },
     methods::map_err,
     models::game_data::{
-        Bookmarks, ChallengeBookmarkEntry, Division, InitialGameDataResponse, Inventory, Item, Kit,
-        LEVEL_ID_HASH, PlayerInfo, PromotedUgcWrapper, Transform, UgcBookmarkEntry, UgcId, UgcMeta,
-        UgcWrapper,
+        Bookmarks, ChallengeBookmarkEntry, Division, InitialGameDataResponse, LEVEL_ID_HASH,
+        PlayerInfo, PromotedUgcWrapper, Transform, UgcBookmarkEntry, UgcId, UgcMeta, UgcWrapper,
     },
 };
 
@@ -250,34 +249,7 @@ pub async fn get_initial_game_data(
         })
         .collect();
 
-    let kit_entries = user_kits::Entity::find()
-        .filter(user_kits::Column::UserId.eq(persona_id))
-        .all(db)
-        .await
-        .map_err(map_err)?;
-
-    let kits: Vec<Kit> = kit_entries
-        .into_iter()
-        .map(|k| Kit {
-            id: k.id.to_string().to_uppercase(),
-            kit_type: k.kit_type.to_string().to_uppercase(),
-            opened: k.opened,
-        })
-        .collect();
-
-    let item_entries = user_items::Entity::find()
-        .filter(user_items::Column::UserId.eq(persona_id))
-        .all(db)
-        .await
-        .map_err(map_err)?;
-
-    let items: Vec<Item> = item_entries
-        .into_iter()
-        .map(|i| Item {
-            id: i.item_id,
-            count: 1,
-        })
-        .collect();
+    let inventory = super::inventory::get_inventory(ctx, persona_id).await?;
 
     Ok(InitialGameDataResponse {
         player_info,
@@ -289,6 +261,6 @@ pub async fn get_initial_game_data(
             ugc_bookmarks: ugc_bookmarks_list,
             challenge_bookmarks: challenge_bookmarks_list,
         },
-        inventory: Inventory { kits, items },
+        inventory,
     })
 }

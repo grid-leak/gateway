@@ -3,8 +3,9 @@ use crate::{
     logic,
     methods::map_err,
     models::{
-        challenge::RunnersRouteDataResponse, customization::GhostDataInput,
-        game_data::InitialGameDataResponse,
+        challenge::RunnersRouteDataResponse,
+        customization::GhostDataInput,
+        game_data::{InitialGameDataResponse, Inventory},
     },
 };
 use jsonrpsee::{
@@ -18,14 +19,20 @@ use std::sync::Arc;
 pub trait PamplonaAuthenticated {
     #[method(name = "getInitialGameData", with_extensions)]
     async fn get_initial_game_data(&self) -> RpcResult<InitialGameDataResponse>;
+
+    #[method(name = "getInventory", with_extensions)]
+    async fn get_inventory(&self) -> RpcResult<Inventory>;
+
     #[method(name = "getRunnersRouteData", with_extensions)]
     async fn get_runners_route_data(
         &self,
         challenge_ids: Vec<String>,
         data_types: Vec<String>,
     ) -> RpcResult<Vec<RunnersRouteDataResponse>>;
+
     #[method(name = "setPlayerGhost", with_extensions)]
     async fn set_player_ghost(&self, ghost_data: GhostDataInput) -> RpcResult<String>;
+
     #[method(name = "setPlayerTag", with_extensions)]
     async fn set_player_tag(
         &self,
@@ -51,6 +58,13 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     ) -> RpcResult<InitialGameDataResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::ugc::get_initial_game_data(&self.ctx, persona_id).await
+    }
+
+    async fn get_inventory(&self, extensions: &Extensions) -> RpcResult<Inventory> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::inventory::get_inventory(&self.ctx, persona_id)
+            .await
+            .map_err(map_err)
     }
 
     async fn get_runners_route_data(
