@@ -2,11 +2,10 @@ use dotenvy::dotenv;
 use hyper::body::Bytes;
 use jsonrpsee::{RpcModule, core::middleware::RpcServiceBuilder, server::Server};
 use sea_orm::Database;
-use std::{env, error::Error, iter::once, net::SocketAddr, sync::Arc, time::Duration};
+use std::{env, error::Error, net::SocketAddr, sync::Arc, time::Duration};
 use tower_http::{
     LatencyUnit,
     compression::CompressionLayer,
-    sensitive_headers::SetSensitiveRequestHeadersLayer,
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
 };
 
@@ -25,7 +24,7 @@ use crate::{
         pamplona_authenticated::{PamplonaAuthenticatedImpl, PamplonaAuthenticatedServer},
     },
     middleware::{
-        http::{GATEWAY_SESSION_HEADER, HttpMiddlewareLayer},
+        http::{HttpMiddlewareLayer, init_secret},
         rpc::RpcMiddlewareLayer,
     },
 };
@@ -34,6 +33,9 @@ use crate::{
 async fn main() -> Result<(), Box<dyn Error>> {
     // Load environment variables
     dotenv().ok();
+
+    // Initialize secret for application/x-encrypted payload decryption
+    init_secret()?;
 
     // Set up logging based on the environment filter
     tracing_subscriber::FmtSubscriber::builder()
@@ -64,9 +66,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let service_builder = tower::ServiceBuilder::new()
         .layer(HttpMiddlewareLayer::new())
-        .layer(SetSensitiveRequestHeadersLayer::new(once(
-            GATEWAY_SESSION_HEADER,
-        )))
         .layer(CompressionLayer::new())
         .layer(trace_layer);
 
