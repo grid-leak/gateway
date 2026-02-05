@@ -60,6 +60,14 @@ pub trait PamplonaAuthenticated {
     #[method(name = "updatePersonaStats", with_extensions)]
     async fn update_persona_stats(&self, stats: UserStats) -> RpcResult<String>;
 
+    #[method(name = "finishHackableBillboard", with_extensions)]
+    async fn finish_hackable_billboard(
+        &self,
+        challenge_id: String,
+        main_stat: i32,
+        extra_stats: serde_json::Value,
+    ) -> RpcResult<String>;
+
     #[method(name = "getPersonaStats", with_extensions)]
     async fn get_persona_stats(&self) -> RpcResult<UserStats>;
 }
@@ -167,6 +175,27 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     ) -> RpcResult<String> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::stats::update_persona_stats(&self.ctx, persona_id, stats).await
+    }
+
+    async fn finish_hackable_billboard(
+        &self,
+        extensions: &Extensions,
+        challenge_id: String,
+        main_stat: i32,
+        extra_stats: serde_json::Value,
+    ) -> RpcResult<String> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::challenge::finish_hackable_billboard(
+            &self.ctx,
+            persona_id,
+            challenge_id,
+            main_stat,
+            extra_stats,
+        )
+        .await
+        .map_err(map_err)?;
+
+        Ok("success".to_string())
     }
 
     async fn get_persona_stats(&self, extensions: &Extensions) -> RpcResult<UserStats> {

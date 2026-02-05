@@ -15,9 +15,7 @@ pub struct Model {
     #[sea_orm(belongs_to, from = "user_id", to = "persona_id")]
     pub user: HasOne<super::users::Entity>,
     #[sea_orm(unique_key = "user_challenge")]
-    #[sea_orm(unique_key = "challenge_score")]
     pub challenge_id: String,
-    #[sea_orm(unique_key = "challenge_score")]
     pub score: i32,
     #[sea_orm(default_value = "1")]
     pub run_id: i32,

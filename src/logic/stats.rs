@@ -791,9 +791,7 @@ pub async fn get_persona_stats(
         .map_err(map_err)?
         .ok_or_else(|| map_err("User not found"))?;
 
-    let stats = user.stats.as_object()
-        .cloned()
-        .unwrap_or_default();
+    let stats = user.stats.as_object().cloned().unwrap_or_default();
 
     Ok(stats)
 }

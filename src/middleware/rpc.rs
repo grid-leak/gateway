@@ -61,7 +61,12 @@ where
         mut request: jsonrpsee::types::Request<'a>,
     ) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
         println!("\n{}", request.method_name());
-        println!("{:#?}", request.params());
+        if let Some(params) = request.params.clone() {
+            let json_val: serde_json::Value = serde_json::from_str(params.get()).unwrap();
+            let pretty = serde_json::to_string_pretty(&json_val).unwrap();
+
+            println!("{}", pretty);
+        }
 
         if request.method_name().starts_with("PamplonaAuthenticated") {
             let session_type = request.extensions.get::<SessionType>().unwrap();

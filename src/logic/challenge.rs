@@ -6,7 +6,7 @@ use crate::{
 use sea_orm::{
     ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter, QueryOrder,
     QuerySelect,
-    sea_query::{Alias, Expr, JoinType, PostgresQueryBuilder, Query},
+    sea_query::{Alias, Expr, JoinType, OnConflict, PostgresQueryBuilder, Query},
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -189,4 +189,42 @@ pub async fn get_hackable_billboard_friends_leaders(
     }
 
     Ok(response_map)
+}
+
+pub async fn finish_hackable_billboard(
+    ctx: &Arc<GatewayContext>,
+    persona_id: i32,
+    challenge_id: String,
+    score: i32,
+    extra_stats: serde_json::Value,
+) -> Result<String, String> {
+    let db = ctx.db();
+    let now = chrono::Utc::now();
+
+    challenge_entries::Entity::insert(challenge_entries::ActiveModel {
+        user_id: sea_orm::Set(persona_id),
+        challenge_id: sea_orm::Set(challenge_id),
+        score: sea_orm::Set(score),
+        extra_stats: sea_orm::Set(extra_stats),
+        created_at: sea_orm::Set(now),
+        run_id: sea_orm::Set(1),
+        ..Default::default()
+    })
+    .on_conflict(
+        OnConflict::columns([
+            challenge_entries::Column::UserId,
+            challenge_entries::Column::ChallengeId,
+        ])
+        .update_columns([
+            challenge_entries::Column::Score,
+            challenge_entries::Column::ExtraStats,
+            challenge_entries::Column::CreatedAt,
+        ])
+        .to_owned(),
+    )
+    .exec(db)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok("success".to_string())
 }
