@@ -2,10 +2,12 @@ use std::sync::Arc;
 
 use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee_proc_macros::rpc;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
 use crate::{
     context::GatewayContext,
-    logic::challenge::get_runners_route_data,
+    entities::users,
+    logic::{self, challenge::get_runners_route_data},
     methods::map_err,
     models::{
         challenge::RunnersRouteDataResponse,
@@ -31,6 +33,12 @@ pub trait Pamplona {
 
     #[method(name = "getPlayerGhosts")]
     async fn get_player_ghosts(&self, persona_ids: Vec<i32>) -> RpcResult<Vec<PlayerGhost>>;
+
+    #[method(name = "getPersonaStats")]
+    async fn get_persona_stats(
+        &self,
+        persona_id: i32,
+    ) -> RpcResult<serde_json::Map<String, serde_json::Value>>;
 }
 
 pub struct PamplonaImpl {
@@ -46,9 +54,6 @@ impl PamplonaImpl {
 #[async_trait]
 impl PamplonaServer for PamplonaImpl {
     async fn get_player_tags(&self, persona_ids: Vec<String>) -> RpcResult<Vec<PlayerTagResponse>> {
-        use crate::entities::users;
-        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-
         let persona_ids_int: Vec<i32> = persona_ids
             .iter()
             .filter_map(|id| id.parse::<i32>().ok())
@@ -80,9 +85,6 @@ impl PamplonaServer for PamplonaImpl {
     }
 
     async fn get_player_tag(&self, persona_id: String) -> RpcResult<TagData> {
-        use crate::entities::users;
-        use sea_orm::EntityTrait;
-
         let persona_id_int = persona_id.parse::<i32>().map_err(|_| {
             jsonrpsee::types::ErrorObject::owned(
                 jsonrpsee::types::error::INVALID_PARAMS_CODE,
@@ -138,8 +140,15 @@ impl PamplonaServer for PamplonaImpl {
     }
 
     async fn get_player_ghosts(&self, persona_ids: Vec<i32>) -> RpcResult<Vec<PlayerGhost>> {
-        crate::logic::customization::get_player_ghosts(&self.ctx, persona_ids)
+        logic::customization::get_player_ghosts(&self.ctx, persona_ids)
             .await
             .map_err(map_err)
+    }
+
+    async fn get_persona_stats(
+        &self,
+        persona_id: i32,
+    ) -> RpcResult<serde_json::Map<String, serde_json::Value>> {
+        logic::stats::get_persona_stats(&self.ctx, persona_id).await
     }
 }

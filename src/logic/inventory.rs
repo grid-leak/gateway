@@ -27,7 +27,7 @@ pub async fn get_inventory(
     let kits: Vec<Kit> = kit_entries
         .iter()
         .map(|k| Kit {
-            id: k.id.to_string().to_uppercase(),
+            id: k.kit_id.to_string().to_uppercase(),
             kit_type: k.kit_type.to_string().to_uppercase(),
             opened: k.opened,
         })
@@ -40,7 +40,7 @@ pub async fn get_inventory(
     // Add rewards from all opened kits
     for kit_entry in &kit_entries {
         if kit_entry.opened
-            && let Some(rewards) = kit_data::get_kit_rewards(&kit_entry.id.to_string())
+            && let Some(rewards) = kit_data::get_kit_rewards(&kit_entry.kit_id.to_string())
         {
             item_ids.extend(rewards.iter().copied());
         }
@@ -85,10 +85,11 @@ pub async fn grant_kit(
     })?;
 
     let new_kit = user_kits::ActiveModel {
-        id: Set(kit_uuid),
         user_id: Set(persona_id),
+        kit_id: Set(kit_uuid),
         kit_type: Set(kit_type_uuid),
         opened: Set(false),
+        ..Default::default()
     };
 
     new_kit.insert(db).await.map_err(map_err)?;
@@ -115,8 +116,9 @@ pub async fn open_kit(
         )
     })?;
 
-    let kit_entry = user_kits::Entity::find_by_id(kit_uuid)
+    let kit_entry = user_kits::Entity::find()
         .filter(user_kits::Column::UserId.eq(persona_id))
+        .filter(user_kits::Column::KitId.eq(kit_uuid))
         .one(db)
         .await
         .map_err(map_err)?
@@ -166,8 +168,9 @@ pub async fn revoke_kit(
         )
     })?;
 
-    let result = user_kits::Entity::delete_by_id(kit_uuid)
+    let result = user_kits::Entity::delete_many()
         .filter(user_kits::Column::UserId.eq(persona_id))
+        .filter(user_kits::Column::KitId.eq(kit_uuid))
         .exec(db)
         .await
         .map_err(map_err)?;

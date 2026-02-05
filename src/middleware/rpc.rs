@@ -60,7 +60,8 @@ where
         &self,
         mut request: jsonrpsee::types::Request<'a>,
     ) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
-        println!("Received {}", request.method_name());
+        println!("\n{}", request.method_name());
+        println!("{:#?}", request.params());
 
         if request.method_name().starts_with("PamplonaAuthenticated") {
             let session_type = request.extensions.get::<SessionType>().unwrap();

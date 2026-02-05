@@ -16,6 +16,8 @@ use jsonrpsee_proc_macros::rpc;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+type UserStats = serde_json::Map<String, serde_json::Value>;
+
 #[rpc(server, namespace = "PamplonaAuthenticated", namespace_separator = ".")]
 pub trait PamplonaAuthenticated {
     #[method(name = "getInitialGameData", with_extensions)]
@@ -54,6 +56,12 @@ pub trait PamplonaAuthenticated {
 
     #[method(name = "revokeKit", with_extensions)]
     async fn revoke_kit(&self, id: String) -> RpcResult<Vec<Item>>;
+
+    #[method(name = "updatePersonaStats", with_extensions)]
+    async fn update_persona_stats(&self, stats: UserStats) -> RpcResult<String>;
+
+    #[method(name = "getPersonaStats", with_extensions)]
+    async fn get_persona_stats(&self) -> RpcResult<UserStats>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -150,5 +158,19 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         logic::inventory::revoke_kit(&self.ctx, persona_id, &id)
             .await
             .map_err(map_err)
+    }
+
+    async fn update_persona_stats(
+        &self,
+        extensions: &Extensions,
+        stats: UserStats,
+    ) -> RpcResult<String> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::stats::update_persona_stats(&self.ctx, persona_id, stats).await
+    }
+
+    async fn get_persona_stats(&self, extensions: &Extensions) -> RpcResult<UserStats> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::stats::get_persona_stats(&self.ctx, persona_id).await
     }
 }
