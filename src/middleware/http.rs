@@ -121,6 +121,9 @@ where
         Box::pin(async move {
             let session = parse_session(req.headers());
 
+            // TODO: pass info about encryption to RPC middleware
+            // so it doesn't let unencrypted requests that require
+            // encryption to be processed
             let should_decrypt = req
                 .headers()
                 .get(CONTENT_TYPE)
@@ -133,7 +136,7 @@ where
             // Collect the body
             let body_bytes = match body.collect().await {
                 Ok(collected) => collected.to_bytes(),
-                Err(e) => {
+                Err(_) => {
                     // Return error by creating a request with empty body
                     let mut new_req = Request::from_parts(parts, Full::new(Bytes::new()));
                     new_req.extensions_mut().insert(session);

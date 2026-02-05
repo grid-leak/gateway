@@ -3,7 +3,6 @@ pub mod challenge_entries;
 pub mod ugc;
 pub mod ugc_bookmarks;
 pub mod ugc_entries;
-pub mod user_items;
 pub mod user_kits;
 pub mod user_ugc_flags;
 pub mod users;

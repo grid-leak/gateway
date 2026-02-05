@@ -5,7 +5,7 @@ use crate::{
     models::{
         challenge::{HackableBillboardLeader, RunnersRouteDataResponse},
         customization::GhostDataInput,
-        game_data::{InitialGameDataResponse, Inventory},
+        game_data::{InitialGameDataResponse, Inventory, Item, Kit},
     },
 };
 use jsonrpsee::{
@@ -45,6 +45,15 @@ pub trait PamplonaAuthenticated {
         &self,
         tag_data: crate::models::customization::TagData,
     ) -> RpcResult<String>;
+
+    #[method(name = "grantKit", with_extensions)]
+    async fn grant_kit(&self, id: String) -> RpcResult<Kit>;
+
+    #[method(name = "openKit", with_extensions)]
+    async fn open_kit(&self, id: String) -> RpcResult<Vec<Item>>;
+
+    #[method(name = "revokeKit", with_extensions)]
+    async fn revoke_kit(&self, id: String) -> RpcResult<Vec<Item>>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -120,5 +129,26 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             .map_err(map_err)?;
 
         Ok("success".to_string())
+    }
+
+    async fn grant_kit(&self, extensions: &Extensions, id: String) -> RpcResult<Kit> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::inventory::grant_kit(&self.ctx, persona_id, &id)
+            .await
+            .map_err(map_err)
+    }
+
+    async fn open_kit(&self, extensions: &Extensions, id: String) -> RpcResult<Vec<Item>> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::inventory::open_kit(&self.ctx, persona_id, &id)
+            .await
+            .map_err(map_err)
+    }
+
+    async fn revoke_kit(&self, extensions: &Extensions, id: String) -> RpcResult<Vec<Item>> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::inventory::revoke_kit(&self.ctx, persona_id, &id)
+            .await
+            .map_err(map_err)
     }
 }
