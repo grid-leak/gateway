@@ -10,8 +10,8 @@ use crate::{
     logic::{self, challenge::get_runners_route_data},
     methods::map_err,
     models::{
-        challenge::RunnersRouteDataResponse,
         customization::{PlayerGhost, PlayerTagResponse, TagData},
+        game_data::RunnersRouteData,
     },
 };
 
@@ -29,7 +29,7 @@ pub trait Pamplona {
         challenge_ids: Vec<String>,
         data_types: Vec<String>,
         persona_id: String,
-    ) -> RpcResult<Vec<RunnersRouteDataResponse>>;
+    ) -> RpcResult<Vec<RunnersRouteData>>;
 
     #[method(name = "getPlayerGhosts")]
     async fn get_player_ghosts(&self, persona_ids: Vec<i32>) -> RpcResult<Vec<PlayerGhost>>;
@@ -121,7 +121,7 @@ impl PamplonaServer for PamplonaImpl {
         challenge_ids: Vec<String>,
         data_types: Vec<String>,
         persona_id: String,
-    ) -> RpcResult<Vec<RunnersRouteDataResponse>> {
+    ) -> RpcResult<Vec<RunnersRouteData>> {
         let pid = persona_id.parse::<i32>().ok();
 
         if pid.is_none() {
@@ -140,7 +140,7 @@ impl PamplonaServer for PamplonaImpl {
     }
 
     async fn get_player_ghosts(&self, persona_ids: Vec<i32>) -> RpcResult<Vec<PlayerGhost>> {
-        logic::customization::get_player_ghosts(&self.ctx, persona_ids)
+        logic::player::get_player_ghosts(&self.ctx, persona_ids)
             .await
             .map_err(map_err)
     }

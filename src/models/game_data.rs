@@ -1,4 +1,7 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::models::user_stats::RunnersRouteUserStats;
 
 pub const LEVEL_ID_HASH: i32 = djb_hash("SP_MainCity");
 
@@ -142,7 +145,33 @@ pub struct Kit {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct HackableBillboardLeader {
+    pub position: i32,
+    pub score: String,
+    pub persona_id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Item {
     pub id: String,
     pub count: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunnersRouteData {
+    pub id: String,
+    pub stats: Option<Value>,
+    pub user_stats: Option<RunnersRouteUserStats>,
+    pub user_rank: Option<UserRank>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserRank {
+    pub rank: i32,
+    pub score: String,
+    pub total: i64,
 }

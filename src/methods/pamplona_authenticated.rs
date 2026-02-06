@@ -3,9 +3,11 @@ use crate::{
     logic,
     methods::map_err,
     models::{
-        challenge::{HackableBillboardLeader, RunnersRouteDataResponse},
         customization::GhostDataInput,
-        game_data::{InitialGameDataResponse, Inventory, Item, Kit},
+        game_data::{
+            HackableBillboardLeader, InitialGameDataResponse, Inventory, Item, Kit,
+            RunnersRouteData,
+        },
     },
 };
 use jsonrpsee::{
@@ -31,7 +33,7 @@ pub trait PamplonaAuthenticated {
         &self,
         challenge_ids: Vec<String>,
         data_types: Vec<String>,
-    ) -> RpcResult<Vec<RunnersRouteDataResponse>>;
+    ) -> RpcResult<Vec<RunnersRouteData>>;
 
     #[method(name = "getHackableBillboardFriendsLeaders", with_extensions)]
     async fn get_hackable_billboard_friends_leaders(
@@ -70,6 +72,9 @@ pub trait PamplonaAuthenticated {
 
     #[method(name = "getPersonaStats", with_extensions)]
     async fn get_persona_stats(&self) -> RpcResult<UserStats>;
+
+    // #[method(name = "getPersonaStats", with_extensions)]
+    // async fn get_latest_played(&self) -> RpcResult<UserStats>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -104,7 +109,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         extensions: &Extensions,
         challenge_ids: Vec<String>,
         data_types: Vec<String>,
-    ) -> RpcResult<Vec<RunnersRouteDataResponse>> {
+    ) -> RpcResult<Vec<RunnersRouteData>> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::challenge::get_runners_route_data(&self.ctx, challenge_ids, data_types, persona_id)
             .await
@@ -127,7 +132,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         ghost_data: GhostDataInput,
     ) -> RpcResult<String> {
         let persona_id = *extensions.get::<i32>().unwrap();
-        logic::customization::set_player_ghost(&self.ctx, persona_id, ghost_data)
+        logic::player::set_player_ghost(&self.ctx, persona_id, ghost_data)
             .await
             .map_err(map_err)?;
 
@@ -140,7 +145,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         tag_data: crate::models::customization::TagData,
     ) -> RpcResult<String> {
         let persona_id = *extensions.get::<i32>().unwrap();
-        logic::customization::set_player_tag(&self.ctx, persona_id, tag_data)
+        logic::player::set_player_tag(&self.ctx, persona_id, tag_data)
             .await
             .map_err(map_err)?;
 
