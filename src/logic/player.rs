@@ -1,10 +1,12 @@
 use crate::context::GatewayContext;
+use crate::entities::entries;
 use crate::entities::{users, users::Entity as Users};
 use crate::models::customization::{
     CustomizationOutput, GhostDataInput, GhostDataOutput, PlayerGhost, TagData, TimestampOutput,
 };
+use crate::models::game_data::{ChallengeEntry, Division, Entry, PlayerInfo, UgcEntry, UgcId};
 use chrono::Utc;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QuerySelect, Set};
 
 pub async fn set_player_ghost(
     ctx: &GatewayContext,
@@ -77,4 +79,97 @@ pub async fn get_player_ghosts(
         .collect();
 
     Ok(ghosts)
+}
+
+pub async fn get_latest_played(
+    ctx: &GatewayContext,
+    persona_id: i32,
+) -> Result<Vec<Entry>, Box<dyn std::error::Error + Send + Sync>> {
+    let entries = entries::Entity::find()
+        .filter(entries::Column::UserId.eq(persona_id))
+        .limit(20)
+        .all(ctx.db())
+        .await?;
+
+    let mut results = Vec::new();
+
+    for entry in entries {
+        let entry_type = entry.entry_type;
+        let user_stats = entry.user_stats;
+
+        match entry_type {
+            entries::EntryType::ReachThis => {
+                if let (Some(user_id), Some(id), Ok(stats)) = (
+                    entry.ugc_author_id,
+                    entry.ugc_id,
+                    serde_json::from_value(user_stats),
+                ) {
+                    results.push(Entry::Ugc(UgcEntry::ReachThis {
+                        ugc_id: UgcId {
+                            user_id: user_id.to_string(),
+                            id: id.to_string(),
+                        },
+                        stats,
+                    }));
+                }
+            }
+            entries::EntryType::TimeTrial => {
+                if let (Some(user_id), Some(id), Ok(stats)) = (
+                    entry.ugc_author_id,
+                    entry.ugc_id,
+                    serde_json::from_value(user_stats),
+                ) {
+                    results.push(Entry::Ugc(UgcEntry::TimeTrial {
+                        ugc_id: UgcId {
+                            user_id: user_id.to_string(),
+                            id: id.to_string(),
+                        },
+                        stats,
+                    }));
+                }
+            }
+            entries::EntryType::HackableBillboard => {
+                if let (Some(challenge_id), Ok(stats)) =
+                    (entry.challenge_id, serde_json::from_value(user_stats))
+                {
+                    results.push(Entry::Challenge(ChallengeEntry::HackableBillboard {
+                        challenge_id,
+                        stats,
+                    }));
+                }
+            }
+            entries::EntryType::RunnersRoute => {
+                if let (Some(challenge_id), Ok(stats)) =
+                    (entry.challenge_id, serde_json::from_value(user_stats))
+                {
+                    results.push(Entry::Challenge(ChallengeEntry::RunnersRoute {
+                        challenge_id,
+                        stats,
+                    }));
+                }
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+pub async fn get_player_info(
+    ctx: &GatewayContext,
+    persona_id: i32,
+) -> Result<PlayerInfo, Box<dyn std::error::Error + Send + Sync>> {
+    let user = Users::find_by_id(persona_id)
+        .one(ctx.db())
+        .await?
+        .ok_or("User not found")?;
+
+    let player_info = PlayerInfo {
+        name: user.name.clone(),
+        division: Division {
+            name: user.division_name.clone(),
+            rank: user.division_rank,
+        },
+    };
+
+    Ok(player_info)
 }

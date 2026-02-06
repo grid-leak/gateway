@@ -264,28 +264,3 @@ pub async fn get_initial_game_data(
         inventory,
     })
 }
-
-pub async fn get_player_info(
-    ctx: &Arc<GatewayContext>,
-    persona_id: i32,
-) -> Result<PlayerInfo, jsonrpsee::types::ErrorObjectOwned> {
-    let db = ctx.db();
-
-    let user = users::Entity::find_by_id(persona_id)
-        .one(db)
-        .await
-        .map_err(map_err)?
-        .ok_or_else(|| map_err("User not found"))?;
-
-    let player_info = PlayerInfo {
-        name: user.name.clone(),
-        division: Division {
-            name: user.division_name.clone(),
-            rank: user.division_rank,
-        },
-    };
-
-    Ok(player_info)
-}
-
-// TODO: get_latest_played

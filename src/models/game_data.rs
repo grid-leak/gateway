@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::models::user_stats::RunnersRouteUserStats;
+use crate::models::user_stats::{
+    EntryUserStats, HackableBillboardUserStats, ReachThisUserStats, RunnersRouteUserStats,
+    TimeTrialUserStats,
+};
 
 pub const LEVEL_ID_HASH: i32 = djb_hash("SP_MainCity");
 
@@ -174,4 +177,40 @@ pub struct UserRank {
     pub rank: i32,
     pub score: String,
     pub total: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Entry {
+    Ugc(UgcEntry),
+    Challenge(ChallengeEntry),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "typeId")]
+pub enum UgcEntry {
+    ReachThis {
+        #[serde(rename = "ugcId")]
+        ugc_id: UgcId,
+        stats: ReachThisUserStats,
+    },
+    TimeTrial {
+        #[serde(rename = "ugcId")]
+        ugc_id: UgcId,
+        stats: TimeTrialUserStats,
+    },
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "challengeType")]
+pub enum ChallengeEntry {
+    HackableBillboard {
+        #[serde(rename = "challengeId")]
+        challenge_id: String,
+        stats: HackableBillboardUserStats,
+    },
+    RunnersRoute {
+        #[serde(rename = "challengeId")]
+        challenge_id: String,
+        stats: RunnersRouteUserStats,
+    },
 }

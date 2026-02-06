@@ -5,7 +5,7 @@ use crate::{
     models::{
         customization::GhostDataInput,
         game_data::{
-            HackableBillboardLeader, InitialGameDataResponse, Inventory, Item, Kit,
+            Entry, HackableBillboardLeader, InitialGameDataResponse, Inventory, Item, Kit,
             RunnersRouteData,
         },
     },
@@ -73,8 +73,8 @@ pub trait PamplonaAuthenticated {
     #[method(name = "getPersonaStats", with_extensions)]
     async fn get_persona_stats(&self) -> RpcResult<UserStats>;
 
-    // #[method(name = "getPersonaStats", with_extensions)]
-    // async fn get_latest_played(&self) -> RpcResult<UserStats>;
+    #[method(name = "getLatestPlayed", with_extensions)]
+    async fn get_latest_played(&self) -> RpcResult<Vec<Entry>>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -206,5 +206,12 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     async fn get_persona_stats(&self, extensions: &Extensions) -> RpcResult<UserStats> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::stats::get_persona_stats(&self.ctx, persona_id).await
+    }
+
+    async fn get_latest_played(&self, extensions: &Extensions) -> RpcResult<Vec<Entry>> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::player::get_latest_played(&self.ctx, persona_id)
+            .await
+            .map_err(map_err)
     }
 }

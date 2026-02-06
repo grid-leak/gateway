@@ -11,7 +11,7 @@ use crate::{
     methods::map_err,
     models::{
         customization::{PlayerGhost, PlayerTagResponse, TagData},
-        game_data::RunnersRouteData,
+        game_data::{Entry, PlayerInfo, RunnersRouteData},
     },
 };
 
@@ -39,6 +39,12 @@ pub trait Pamplona {
         &self,
         persona_id: i32,
     ) -> RpcResult<serde_json::Map<String, serde_json::Value>>;
+
+    #[method(name = "getLatestPlayed")]
+    async fn get_latest_played(&self, persona_id: i32) -> RpcResult<Vec<Entry>>;
+
+    #[method(name = "getPlayerInfo")]
+    async fn get_player_info(&self, persona_id: String) -> RpcResult<PlayerInfo>;
 }
 
 pub struct PamplonaImpl {
@@ -150,5 +156,29 @@ impl PamplonaServer for PamplonaImpl {
         persona_id: i32,
     ) -> RpcResult<serde_json::Map<String, serde_json::Value>> {
         logic::stats::get_persona_stats(&self.ctx, persona_id).await
+    }
+
+    async fn get_latest_played(&self, persona_id: i32) -> RpcResult<Vec<Entry>> {
+        logic::player::get_latest_played(&self.ctx, persona_id)
+            .await
+            .map_err(map_err)
+    }
+
+    async fn get_player_info(&self, persona_id: String) -> RpcResult<PlayerInfo> {
+        let pid = persona_id.parse::<i32>().ok();
+
+        if pid.is_none() {
+            return Err(jsonrpsee::types::ErrorObject::owned(
+                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
+                "Invalid persona id",
+                None::<()>,
+            ));
+        }
+
+        let pid = pid.unwrap();
+
+        logic::player::get_player_info(&self.ctx, pid)
+            .await
+            .map_err(map_err)
     }
 }
