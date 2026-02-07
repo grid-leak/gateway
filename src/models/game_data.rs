@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_with::{PickFirst, serde_as, DisplayFromStr};
 
 use crate::models::user_stats::{
-    EntryUserStats, HackableBillboardUserStats, ReachThisUserStats, RunnersRouteUserStats,
-    TimeTrialUserStats,
+    HackableBillboardUserStats, ReachThisUserStats, RunnersRouteUserStats, TimeTrialUserStats,
 };
 
 pub const LEVEL_ID_HASH: i32 = djb_hash("SP_MainCity");
@@ -56,6 +56,16 @@ pub struct UgcWrapper {
     pub user_rank: Option<()>,
 }
 
+// TODO: make universal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReachThisWrapper {
+    pub meta: Option<UgcMeta>,
+    pub stats: Option<()>,
+    pub user_stats: Option<ReachThisUserStats>,
+    pub user_rank: Option<UserRank>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromotedUgcWrapper {
@@ -89,6 +99,16 @@ pub struct UgcMeta {
 #[serde(rename_all = "camelCase")]
 pub struct UgcId {
     pub user_id: String,
+    pub id: String,
+}
+
+// TODO: make universal
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UgcIdWithNumberId {
+    #[serde_as(as = "PickFirst<(_, DisplayFromStr)>")]
+    pub user_id: i32,
     pub id: String,
 }
 
@@ -213,4 +233,40 @@ pub enum ChallengeEntry {
         challenge_id: String,
         stats: RunnersRouteUserStats,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerUgcLimits {
+    pub ugc_count: i32,
+    pub max_ugc: i32,
+    pub published_count: i32,
+    pub max_published: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverviewReachThisLeaderboardResponse {
+    pub leaderboard: LeaderboardWrapper,
+    pub global_leader: Option<LeaderboardUser>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaderboardWrapper {
+    pub area: Option<()>, // Always null in example
+    pub total_count: i64,
+    pub users: Vec<LeaderboardUser>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaderboardUser {
+    pub position: i32,
+    pub global_rank: i32,
+    pub score: String,
+    pub percentile: Option<f64>,
+    pub persona_id: String,
+    pub name: String,
+    pub division: Division,
 }

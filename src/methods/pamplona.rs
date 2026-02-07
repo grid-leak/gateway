@@ -11,7 +11,9 @@ use crate::{
     methods::map_err,
     models::{
         customization::{PlayerGhost, PlayerTagResponse, TagData},
-        game_data::{Entry, PlayerInfo, RunnersRouteData},
+        game_data::{
+            Entry, PlayerInfo, ReachThisWrapper, RunnersRouteData, UgcId, UgcIdWithNumberId,
+        },
     },
 };
 
@@ -45,6 +47,14 @@ pub trait Pamplona {
 
     #[method(name = "getPlayerInfo")]
     async fn get_player_info(&self, persona_id: String) -> RpcResult<PlayerInfo>;
+
+    #[method(name = "getReachThisData")]
+    async fn get_reach_this_data(
+        &self,
+        ugc_ids: Vec<UgcIdWithNumberId>,
+        data_types: Vec<String>,
+        persona_id: i32,
+    ) -> RpcResult<Vec<ReachThisWrapper>>;
 }
 
 pub struct PamplonaImpl {
@@ -178,6 +188,19 @@ impl PamplonaServer for PamplonaImpl {
         let pid = pid.unwrap();
 
         logic::player::get_player_info(&self.ctx, pid)
+            .await
+            .map_err(map_err)
+    }
+
+    async fn get_reach_this_data(
+        &self,
+        ugc_ids: Vec<UgcIdWithNumberId>,
+        data_types: Vec<String>,
+        persona_id: i32,
+    ) -> RpcResult<Vec<ReachThisWrapper>> {
+        let ugc_ids = ugc_ids.into_iter().map(|id| id.id).collect();
+
+        logic::ugc::get_reach_this_data(&self.ctx, ugc_ids, data_types, persona_id)
             .await
             .map_err(map_err)
     }

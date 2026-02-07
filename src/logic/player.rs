@@ -1,11 +1,14 @@
 use crate::context::GatewayContext;
-use crate::entities::entries;
+use crate::entities::{entries, ugc};
 use crate::entities::{users, users::Entity as Users};
 use crate::models::customization::{
     CustomizationOutput, GhostDataInput, GhostDataOutput, PlayerGhost, TagData, TimestampOutput,
 };
-use crate::models::game_data::{ChallengeEntry, Division, Entry, PlayerInfo, UgcEntry, UgcId};
+use crate::models::game_data::{
+    ChallengeEntry, Division, Entry, PlayerInfo, PlayerUgcLimits, UgcEntry, UgcId,
+};
 use chrono::Utc;
+use sea_orm::prelude::Expr;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QuerySelect, Set};
 
 pub async fn set_player_ghost(
@@ -172,4 +175,29 @@ pub async fn get_player_info(
     };
 
     Ok(player_info)
+}
+
+pub async fn get_player_ugc_limits(
+    ctx: &GatewayContext,
+    persona_id: i32,
+) -> Result<PlayerUgcLimits, Box<dyn std::error::Error + Send + Sync>> {
+    let counts: (i64, i64) = ugc::Entity::find()
+        .filter(ugc::Column::AuthorId.eq(persona_id))
+        .select_only()
+        .column_as(ugc::Column::Id.count(), "total")
+        .column_as(
+            Expr::cust("COUNT(*) FILTER (WHERE published = true)"),
+            "published",
+        )
+        .into_tuple::<(i64, i64)>()
+        .one(ctx.db())
+        .await?
+        .unwrap_or((0, 0));
+
+    Ok(PlayerUgcLimits {
+        ugc_count: counts.0 as i32,
+        max_ugc: 100,
+        published_count: counts.1 as i32,
+        max_published: 100,
+    })
 }

@@ -6,8 +6,10 @@ use crate::{
         customization::GhostDataInput,
         game_data::{
             Entry, HackableBillboardLeader, InitialGameDataResponse, Inventory, Item, Kit,
-            RunnersRouteData,
+            OverviewReachThisLeaderboardResponse, PlayerUgcLimits, ReachThisWrapper,
+            RunnersRouteData, UgcId, UgcIdWithNumberId, UgcMeta,
         },
+        ugc::CreateReachThisMeta,
     },
 };
 use jsonrpsee::{
@@ -75,6 +77,26 @@ pub trait PamplonaAuthenticated {
 
     #[method(name = "getLatestPlayed", with_extensions)]
     async fn get_latest_played(&self) -> RpcResult<Vec<Entry>>;
+
+    #[method(name = "getPlayerUgcLimits", with_extensions)]
+    async fn get_player_ugc_limits(&self) -> RpcResult<PlayerUgcLimits>;
+
+    #[method(name = "createReachThis", with_extensions)]
+    async fn create_reach_this(
+        &self,
+        data: String,
+        meta: CreateReachThisMeta,
+    ) -> RpcResult<UgcMeta>;
+
+    #[method(name = "finishReachThis", with_extensions)]
+    async fn finish_reach_this(&self, ugc_id: UgcIdWithNumberId) -> RpcResult<ReachThisWrapper>;
+
+    #[method(name = "getOverviewReachThisLeaderboard", with_extensions)]
+    async fn get_overview_reach_this_leaderboard(
+        &self,
+        ugc_id: UgcIdWithNumberId,
+        radius: Option<i32>,
+    ) -> RpcResult<OverviewReachThisLeaderboardResponse>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -211,6 +233,50 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     async fn get_latest_played(&self, extensions: &Extensions) -> RpcResult<Vec<Entry>> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::player::get_latest_played(&self.ctx, persona_id)
+            .await
+            .map_err(map_err)
+    }
+
+    async fn get_player_ugc_limits(&self, extensions: &Extensions) -> RpcResult<PlayerUgcLimits> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::player::get_player_ugc_limits(&self.ctx, persona_id)
+            .await
+            .map_err(map_err)
+    }
+
+    async fn create_reach_this(
+        &self,
+        extensions: &Extensions,
+        _data: String,
+        meta: CreateReachThisMeta,
+    ) -> RpcResult<UgcMeta> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+
+        logic::ugc::create_reach_this(&self.ctx, persona_id, meta)
+            .await
+            .map_err(map_err)
+    }
+
+    async fn finish_reach_this(
+        &self,
+        extensions: &Extensions,
+        ugc_id: UgcIdWithNumberId,
+    ) -> RpcResult<ReachThisWrapper> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::ugc::finish_reach_this(&self.ctx, persona_id, ugc_id.id, ugc_id.user_id)
+            .await
+            .map_err(map_err)
+    }
+
+    async fn get_overview_reach_this_leaderboard(
+        &self,
+        extensions: &Extensions,
+        ugc_id: UgcIdWithNumberId,
+        radius: Option<i32>,
+    ) -> RpcResult<OverviewReachThisLeaderboardResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+
+        logic::ugc::get_overview_reach_this_leaderboard(&self.ctx, persona_id, ugc_id.id, radius)
             .await
             .map_err(map_err)
     }

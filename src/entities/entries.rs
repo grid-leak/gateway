@@ -25,7 +25,7 @@ pub struct Model {
     pub user: HasOne<super::users::Entity>,
     #[sea_orm(indexed)]
     pub ugc_id: Option<Uuid>,
-    pub ugc_author_id: Option<i64>,
+    pub ugc_author_id: Option<i32>,
     #[sea_orm(unique_key = "user_entry", indexed)]
     pub challenge_id: Option<String>,
     pub entry_type: EntryType,
