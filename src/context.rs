@@ -51,4 +51,12 @@ impl GatewayContext {
         // sessions.remove(session_id);
         // None
     }
+
+    // TODO: implement something like this:
+    // pub async fn user(&self) -> Result<users::Model, Error> {
+    //     users::Entity::find_by_id(self.user_id)
+    //         .one(&self.db)
+    //         .await?
+    //         .ok_or(Error::UserNotFound)
+    // }
 }

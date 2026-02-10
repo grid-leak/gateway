@@ -11,26 +11,24 @@ use crate::{
     methods::map_err,
     models::{
         customization::{PlayerGhost, PlayerTagResponse, TagData},
-        game_data::{
-            Entry, PlayerInfo, ReachThisWrapper, RunnersRouteData, UgcId, UgcIdWithNumberId,
-        },
+        game_data::{Entry, PlayerInfo, ReachThisWrapper, RunnersRouteData, UgcId},
     },
 };
 
 #[rpc(server, namespace = "Pamplona", namespace_separator = ".")]
 pub trait Pamplona {
     #[method(name = "getPlayerTags")]
-    async fn get_player_tags(&self, persona_ids: Vec<String>) -> RpcResult<Vec<PlayerTagResponse>>;
+    async fn get_player_tags(&self, persona_ids: Vec<i32>) -> RpcResult<Vec<PlayerTagResponse>>;
 
     #[method(name = "getPlayerTag")]
-    async fn get_player_tag(&self, persona_id: String) -> RpcResult<TagData>;
+    async fn get_player_tag(&self, persona_id: i32) -> RpcResult<TagData>;
 
     #[method(name = "getRunnersRouteData")]
     async fn get_runners_route_data(
         &self,
         challenge_ids: Vec<String>,
         data_types: Vec<String>,
-        persona_id: String,
+        persona_id: i32,
     ) -> RpcResult<Vec<RunnersRouteData>>;
 
     #[method(name = "getPlayerGhosts")]
@@ -46,12 +44,12 @@ pub trait Pamplona {
     async fn get_latest_played(&self, persona_id: i32) -> RpcResult<Vec<Entry>>;
 
     #[method(name = "getPlayerInfo")]
-    async fn get_player_info(&self, persona_id: String) -> RpcResult<PlayerInfo>;
+    async fn get_player_info(&self, persona_id: i32) -> RpcResult<PlayerInfo>;
 
     #[method(name = "getReachThisData")]
     async fn get_reach_this_data(
         &self,
-        ugc_ids: Vec<UgcIdWithNumberId>,
+        ugc_ids: Vec<UgcId>,
         data_types: Vec<String>,
         persona_id: i32,
     ) -> RpcResult<Vec<ReachThisWrapper>>;
@@ -69,18 +67,13 @@ impl PamplonaImpl {
 
 #[async_trait]
 impl PamplonaServer for PamplonaImpl {
-    async fn get_player_tags(&self, persona_ids: Vec<String>) -> RpcResult<Vec<PlayerTagResponse>> {
-        let persona_ids_int: Vec<i32> = persona_ids
-            .iter()
-            .filter_map(|id| id.parse::<i32>().ok())
-            .collect();
-
-        if persona_ids_int.is_empty() {
+    async fn get_player_tags(&self, persona_ids: Vec<i32>) -> RpcResult<Vec<PlayerTagResponse>> {
+        if persona_ids.is_empty() {
             return Ok(vec![]);
         }
 
         let users = users::Entity::find()
-            .filter(users::Column::PersonaId.is_in(persona_ids_int))
+            .filter(users::Column::PersonaId.is_in(persona_ids))
             .all(self.ctx.db())
             .await
             .map_err(map_err)?;
@@ -100,16 +93,8 @@ impl PamplonaServer for PamplonaImpl {
         Ok(response)
     }
 
-    async fn get_player_tag(&self, persona_id: String) -> RpcResult<TagData> {
-        let persona_id_int = persona_id.parse::<i32>().map_err(|_| {
-            jsonrpsee::types::ErrorObject::owned(
-                jsonrpsee::types::error::INVALID_PARAMS_CODE,
-                "Invalid persona_id",
-                None::<()>,
-            )
-        })?;
-
-        let user = users::Entity::find_by_id(persona_id_int)
+    async fn get_player_tag(&self, persona_id: i32) -> RpcResult<TagData> {
+        let user = users::Entity::find_by_id(persona_id)
             .one(self.ctx.db())
             .await
             .map_err(map_err)?
@@ -136,21 +121,9 @@ impl PamplonaServer for PamplonaImpl {
         &self,
         challenge_ids: Vec<String>,
         data_types: Vec<String>,
-        persona_id: String,
+        persona_id: i32,
     ) -> RpcResult<Vec<RunnersRouteData>> {
-        let pid = persona_id.parse::<i32>().ok();
-
-        if pid.is_none() {
-            return Err(jsonrpsee::types::ErrorObject::owned(
-                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                "Invalid persona id",
-                None::<()>,
-            ));
-        }
-
-        let pid = pid.unwrap();
-
-        get_runners_route_data(&self.ctx, challenge_ids, data_types, pid)
+        get_runners_route_data(&self.ctx, challenge_ids, data_types, persona_id)
             .await
             .map_err(map_err)
     }
@@ -174,27 +147,15 @@ impl PamplonaServer for PamplonaImpl {
             .map_err(map_err)
     }
 
-    async fn get_player_info(&self, persona_id: String) -> RpcResult<PlayerInfo> {
-        let pid = persona_id.parse::<i32>().ok();
-
-        if pid.is_none() {
-            return Err(jsonrpsee::types::ErrorObject::owned(
-                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                "Invalid persona id",
-                None::<()>,
-            ));
-        }
-
-        let pid = pid.unwrap();
-
-        logic::player::get_player_info(&self.ctx, pid)
+    async fn get_player_info(&self, persona_id: i32) -> RpcResult<PlayerInfo> {
+        logic::player::get_player_info(&self.ctx, persona_id)
             .await
             .map_err(map_err)
     }
 
     async fn get_reach_this_data(
         &self,
-        ugc_ids: Vec<UgcIdWithNumberId>,
+        ugc_ids: Vec<UgcId>,
         data_types: Vec<String>,
         persona_id: i32,
     ) -> RpcResult<Vec<ReachThisWrapper>> {

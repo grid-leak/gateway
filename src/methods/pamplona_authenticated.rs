@@ -7,7 +7,7 @@ use crate::{
         game_data::{
             Entry, HackableBillboardLeader, InitialGameDataResponse, Inventory, Item, Kit,
             OverviewReachThisLeaderboardResponse, PlayerUgcLimits, ReachThisWrapper,
-            RunnersRouteData, UgcId, UgcIdWithNumberId, UgcMeta,
+            RunnersRouteData, UgcId, UgcMeta,
         },
         ugc::CreateReachThisMeta,
     },
@@ -25,7 +25,10 @@ type UserStats = serde_json::Map<String, serde_json::Value>;
 #[rpc(server, namespace = "PamplonaAuthenticated", namespace_separator = ".")]
 pub trait PamplonaAuthenticated {
     #[method(name = "getInitialGameData", with_extensions)]
-    async fn get_initial_game_data(&self) -> RpcResult<InitialGameDataResponse>;
+    async fn get_initial_game_data(
+        &self,
+        level_ids: Vec<u32>,
+    ) -> RpcResult<InitialGameDataResponse>;
 
     #[method(name = "getInventory", with_extensions)]
     async fn get_inventory(&self) -> RpcResult<Inventory>;
@@ -89,12 +92,12 @@ pub trait PamplonaAuthenticated {
     ) -> RpcResult<UgcMeta>;
 
     #[method(name = "finishReachThis", with_extensions)]
-    async fn finish_reach_this(&self, ugc_id: UgcIdWithNumberId) -> RpcResult<ReachThisWrapper>;
+    async fn finish_reach_this(&self, ugc_id: UgcId) -> RpcResult<ReachThisWrapper>;
 
     #[method(name = "getOverviewReachThisLeaderboard", with_extensions)]
     async fn get_overview_reach_this_leaderboard(
         &self,
-        ugc_id: UgcIdWithNumberId,
+        ugc_id: UgcId,
         radius: Option<i32>,
     ) -> RpcResult<OverviewReachThisLeaderboardResponse>;
 }
@@ -114,9 +117,10 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     async fn get_initial_game_data(
         &self,
         extensions: &Extensions,
+        level_ids: Vec<u32>,
     ) -> RpcResult<InitialGameDataResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
-        logic::ugc::get_initial_game_data(&self.ctx, persona_id).await
+        logic::ugc::get_initial_game_data(&self.ctx, level_ids[0], persona_id).await
     }
 
     async fn get_inventory(&self, extensions: &Extensions) -> RpcResult<Inventory> {
@@ -260,7 +264,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     async fn finish_reach_this(
         &self,
         extensions: &Extensions,
-        ugc_id: UgcIdWithNumberId,
+        ugc_id: UgcId,
     ) -> RpcResult<ReachThisWrapper> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::ugc::finish_reach_this(&self.ctx, persona_id, ugc_id.id, ugc_id.user_id)
@@ -271,7 +275,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     async fn get_overview_reach_this_leaderboard(
         &self,
         extensions: &Extensions,
-        ugc_id: UgcIdWithNumberId,
+        ugc_id: UgcId,
         radius: Option<i32>,
     ) -> RpcResult<OverviewReachThisLeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();

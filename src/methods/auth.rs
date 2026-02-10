@@ -1,4 +1,4 @@
-use sea_orm::EntityTrait;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -33,6 +33,7 @@ impl AuthenticationServer for AuthenticationImpl {
         // For now, fetch the first user from the database
 
         let user_opt = users::Entity::find()
+            .filter(users::Column::PersonaId.eq(1011786733))
             .one(self.ctx.db())
             .await
             .map_err(map_err)?;

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serde_with::{PickFirst, serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, PickFirst, serde_as};
 
 use crate::models::user_stats::{
     HackableBillboardUserStats, ReachThisUserStats, RunnersRouteUserStats, TimeTrialUserStats,
@@ -28,6 +28,7 @@ pub struct InitialGameDataResponse {
     pub user_stats: serde_json::Value,
     pub user_reach_this: Vec<UgcWrapper>,
     pub user_time_trials: Vec<UgcWrapper>,
+    #[serde(rename = "promotedUGC")]
     pub promoted_ugc: Vec<PromotedUgcWrapper>,
     pub bookmarks: Bookmarks,
     pub inventory: Inventory,
@@ -37,7 +38,17 @@ pub struct InitialGameDataResponse {
 #[serde(rename_all = "camelCase")]
 pub struct PlayerInfo {
     pub name: String,
+    pub location: Vec<Location>,
     pub division: Division,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Location {
+    pub r#type: String,
+    pub name: String,
+    pub cc: String,
+    pub id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,19 +106,12 @@ pub struct UgcMeta {
     pub type_id: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UgcId {
-    pub user_id: String,
-    pub id: String,
-}
-
-// TODO: make universal
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UgcIdWithNumberId {
-    #[serde_as(as = "PickFirst<(_, DisplayFromStr)>")]
+pub struct UgcId {
+    // Deserializes from string or i32, serializes into string
+    #[serde_as(as = "PickFirst<(DisplayFromStr, _)>")]
     pub user_id: i32,
     pub id: String,
 }

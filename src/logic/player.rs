@@ -5,7 +5,7 @@ use crate::models::customization::{
     CustomizationOutput, GhostDataInput, GhostDataOutput, PlayerGhost, TagData, TimestampOutput,
 };
 use crate::models::game_data::{
-    ChallengeEntry, Division, Entry, PlayerInfo, PlayerUgcLimits, UgcEntry, UgcId,
+    ChallengeEntry, Division, Entry, Location, PlayerInfo, PlayerUgcLimits, UgcEntry, UgcId,
 };
 use chrono::Utc;
 use sea_orm::prelude::Expr;
@@ -109,7 +109,7 @@ pub async fn get_latest_played(
                 ) {
                     results.push(Entry::Ugc(UgcEntry::ReachThis {
                         ugc_id: UgcId {
-                            user_id: user_id.to_string(),
+                            user_id,
                             id: id.to_string(),
                         },
                         stats,
@@ -124,7 +124,7 @@ pub async fn get_latest_played(
                 ) {
                     results.push(Entry::Ugc(UgcEntry::TimeTrial {
                         ugc_id: UgcId {
-                            user_id: user_id.to_string(),
+                            user_id,
                             id: id.to_string(),
                         },
                         stats,
@@ -172,6 +172,20 @@ pub async fn get_player_info(
             name: user.division_name.clone(),
             rank: user.division_rank,
         },
+        location: vec![
+            Location {
+                r#type: "country".to_string(),
+                name: "Ukraine".to_string(),
+                cc: "UA".to_string(),
+                id: "690791".to_string(),
+            },
+            Location {
+                r#type: "locality".to_string(),
+                name: "Kyiv".to_string(),
+                cc: "UA".to_string(),
+                id: "703448".to_string(),
+            },
+        ],
     };
 
     Ok(player_info)
