@@ -19,14 +19,15 @@ pub enum EntryType {
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
-    #[sea_orm(unique_key = "user_entry")]
+    #[sea_orm(unique_key = "user_challenge_unique", unique_key = "user_ugc_unique")]
     pub user_id: i32,
     #[sea_orm(belongs_to, from = "user_id", to = "persona_id")]
     pub user: HasOne<super::users::Entity>,
-    #[sea_orm(indexed)]
+    #[sea_orm(unique_key = "user_ugc_unique")]
     pub ugc_id: Option<Uuid>,
+    // TODO: get rid of ugc_author_id
     pub ugc_author_id: Option<i32>,
-    #[sea_orm(unique_key = "user_entry", indexed)]
+    #[sea_orm(unique_key = "user_challenge_unique")]
     pub challenge_id: Option<String>,
     pub entry_type: EntryType,
     #[sea_orm(indexed)]

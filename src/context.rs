@@ -1,7 +1,11 @@
-use sea_orm::DatabaseConnection;
+use jsonrpsee::types::ErrorObjectOwned;
+use sea_orm::{DatabaseConnection, EntityTrait};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use crate::entities::users;
+use crate::methods::map_err;
 
 const SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -52,11 +56,17 @@ impl GatewayContext {
         // None
     }
 
-    // TODO: implement something like this:
-    // pub async fn user(&self) -> Result<users::Model, Error> {
-    //     users::Entity::find_by_id(self.user_id)
-    //         .one(&self.db)
-    //         .await?
-    //         .ok_or(Error::UserNotFound)
-    // }
+    pub async fn user(&self, persona_id: i32) -> Result<users::Model, ErrorObjectOwned> {
+        users::Entity::find_by_id(persona_id)
+            .one(&self.db)
+            .await
+            .map_err(map_err)?
+            .ok_or_else(|| {
+                ErrorObjectOwned::owned(
+                    -32000, // Standard JSON-RPC error code for server error
+                    "User not found",
+                    None::<()>,
+                )
+            })
+    }
 }

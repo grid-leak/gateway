@@ -22,7 +22,7 @@ use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter,
     QueryOrder, QuerySelect, Set,
-    sea_query::{Alias, Expr, JoinType, PostgresQueryBuilder, Query},
+    sea_query::{Alias, Expr, JoinType, OnConflict, PostgresQueryBuilder, Query},
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -62,12 +62,14 @@ pub async fn get_initial_game_data(
         .filter(ugc::Column::AuthorId.ne(persona_id))
         .limit(300);
 
-    let bookmarks_query =
-        ugc_bookmarks::Entity::find().filter(ugc_bookmarks::Column::UserId.eq(persona_id));
+    let bookmarks_query = ugc_bookmarks::Entity::find()
+        .filter(ugc_bookmarks::Column::UserId.eq(persona_id))
+        .find_also_related(ugc::Entity);
+
     let challenge_bm_query = challenge_bookmarks::Entity::find()
         .filter(challenge_bookmarks::Column::UserId.eq(persona_id));
 
-    let (reach_this, time_trials, random_ugc, ugc_bookmarks, challenge_bookmarks, inventory) =
+    let (reach_this, time_trials, random_ugc, bookmarks_data, challenge_bookmarks, inventory) =
         if skip_ugc {
             let (inv, c_bm) =
                 tokio::try_join!(super::inventory::get_inventory(ctx, persona_id), async {
@@ -85,21 +87,9 @@ pub async fn get_initial_game_data(
             )?
         };
 
-    // Fetch bookmarked UGC models
-    // TODO: fetch in a single call
-    let bookmarked_ugc_ids: Vec<_> = ugc_bookmarks.iter().map(|b| b.ugc_id).collect();
-    let bookmarked_ugc_models = if !bookmarked_ugc_ids.is_empty() {
-        ugc::Entity::find()
-            .filter(ugc::Column::Id.is_in(bookmarked_ugc_ids))
-            .all(db)
-            .await
-            .map_err(map_err)?
-    } else {
-        Vec::new()
-    };
-    let bookmarked_map: HashMap<Uuid, ugc::Model> = bookmarked_ugc_models
+    let valid_bookmark_ugcs: Vec<&ugc::Model> = bookmarks_data
         .iter()
-        .map(|e| (e.id, e.clone()))
+        .filter_map(|(_bm, ugc_opt)| ugc_opt.as_ref())
         .collect();
 
     // Bulk load authors & flags
@@ -108,7 +98,7 @@ pub async fn get_initial_game_data(
     all_ugc_refs.extend(reach_this.iter());
     all_ugc_refs.extend(time_trials.iter());
     all_ugc_refs.extend(random_ugc.iter());
-    all_ugc_refs.extend(bookmarked_ugc_models.iter());
+    all_ugc_refs.extend(valid_bookmark_ugcs);
 
     let batch_loader = BatchUgcLoader::load(db, persona_id, &all_ugc_refs).await?;
 
@@ -152,17 +142,18 @@ pub async fn get_initial_game_data(
     }
 
     // Bookmarks
-    let ugc_bookmarks_list: Vec<UgcBookmarkEntry> = ugc_bookmarks
+    let ugc_bookmarks_list: Vec<UgcBookmarkEntry> = bookmarks_data
         .into_iter()
-        .filter_map(|bm| {
-            let entry = bookmarked_map.get(&bm.ugc_id)?;
+        .filter_map(|(bm, ugc_opt)| {
+            let entry = ugc_opt?;
+
             let author = batch_loader.get_author(entry.author_id);
             let flags = batch_loader.get_flag(&entry.id);
 
             Some(UgcBookmarkEntry {
                 ugc_type: entry.r#type.to_string(),
                 bookmark_time: bm.bookmark_time.to_string(),
-                meta: entry.clone().into_meta(author, &flags),
+                meta: entry.into_meta(author, &flags),
             })
         })
         .collect();
@@ -265,10 +256,11 @@ pub async fn finish_reach_this(
 ) -> Result<ReachThisWrapper, jsonrpsee::types::ErrorObjectOwned> {
     let db = ctx.db();
     let now = chrono::Utc::now();
+    let ugc_uuid = Uuid::from_str(&ugc_id).map_err(|_| map_err("Invalid UGC UUID"))?;
 
     entries::Entity::insert(entries::ActiveModel {
         user_id: Set(persona_id),
-        ugc_id: Set(Some(Uuid::from_str(&ugc_id).unwrap())),
+        ugc_id: Set(Some(ugc_uuid)),
         ugc_author_id: Set(Some(ugc_author_id)),
         challenge_id: Set(None),
         entry_type: Set(EntryType::ReachThis),
@@ -277,6 +269,11 @@ pub async fn finish_reach_this(
         score: Set(0),
         ..Default::default()
     })
+    .on_conflict(
+        OnConflict::columns([entries::Column::UserId, entries::Column::UgcId])
+            .update_column(entries::Column::CompletedAt)
+            .to_owned(),
+    )
     .exec(db)
     .await
     .map_err(map_err)?;
@@ -301,6 +298,8 @@ struct CountResult {
     count: i64,
 }
 
+// FIXME:
+// ErrorObject { code: InternalError, message: \"Query Error: error returned from database: operator does not exist: entry_type = text\", data: None }
 pub async fn get_reach_this_data(
     ctx: &Arc<GatewayContext>,
     ugc_ids: Vec<String>,
@@ -390,7 +389,8 @@ pub async fn get_reach_this_data(
                 .and_where(Expr::col((t1.clone(), entries::Column::UserId)).eq(persona_id))
                 .and_where(Expr::col(t1_id.clone()).is_in(requested_ids.clone()))
                 .and_where(
-                    Expr::col((t1.clone(), entries::Column::EntryType)).eq(EntryType::ReachThis),
+                    Expr::col((t1.clone(), entries::Column::EntryType))
+                        .eq(Expr::val(EntryType::ReachThis).cast_as(Alias::new("entry_type"))),
                 )
                 .group_by_col(t1_id);
 
