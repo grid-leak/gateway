@@ -3,10 +3,15 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum EntryUserStats {
-    RunnersRoute(RunnersRouteUserStats),
-    ReachThis(ReachThisUserStats),
+pub enum ChallengeEntryUserStats {
     HackableBillboard(HackableBillboardUserStats),
+    RunnersRoute(RunnersRouteUserStats),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum UgcEntryUserStats {
+    ReachThis(ReachThisUserStats),
     TimeTrial(TimeTrialUserStats),
 }
 

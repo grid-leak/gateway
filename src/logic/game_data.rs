@@ -7,9 +7,9 @@ use crate::{
     models::game_data::{LEVEL_ID_HASH, Transform, UgcId, UgcMeta},
 };
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
-use uuid::Uuid;
 use std::collections::HashMap;
 use std::fmt;
+use uuid::Uuid;
 
 const UGC_BASE_URL: &str = "https://mec-gw.ops.dice.se/ugc/prod_default/prod_default/pc";
 

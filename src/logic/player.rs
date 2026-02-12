@@ -1,5 +1,5 @@
 use crate::context::GatewayContext;
-use crate::entities::{entries, ugc};
+use crate::entities::{challenge_entries, ugc, ugc_entries};
 use crate::entities::{users, users::Entity as Users};
 use crate::models::customization::{
     CustomizationOutput, GhostDataInput, GhostDataOutput, PlayerGhost, TagData, TimestampOutput,
@@ -88,65 +88,85 @@ pub async fn get_latest_played(
     ctx: &GatewayContext,
     persona_id: i32,
 ) -> Result<Vec<Entry>, Box<dyn std::error::Error + Send + Sync>> {
-    let entries = entries::Entity::find()
-        .filter(entries::Column::UserId.eq(persona_id))
+    // Fetch challenge entries
+    let challenge_entries_list = challenge_entries::Entity::find()
+        .filter(challenge_entries::Column::UserId.eq(persona_id))
         .limit(20)
         .all(ctx.db())
         .await?;
 
+    // Fetch UGC entries
+    let ugc_entries_list = ugc_entries::Entity::find()
+        .filter(ugc_entries::Column::UserId.eq(persona_id))
+        .limit(20)
+        .all(ctx.db())
+        .await?;
+
+    // Fetch UGC metadata for author IDs
+    let ugc_ids: Vec<uuid::Uuid> = ugc_entries_list.iter().map(|e| e.ugc_id).collect();
+    let ugc_models: std::collections::HashMap<uuid::Uuid, crate::entities::ugc::Model> =
+        if !ugc_ids.is_empty() {
+            ugc::Entity::find()
+                .filter(ugc::Column::Id.is_in(ugc_ids))
+                .all(ctx.db())
+                .await?
+                .into_iter()
+                .map(|u| (u.id, u))
+                .collect()
+        } else {
+            std::collections::HashMap::new()
+        };
+
     let mut results = Vec::new();
 
-    for entry in entries {
-        let entry_type = entry.entry_type;
+    for entry in challenge_entries_list {
         let user_stats = entry.user_stats;
+        match entry.entry_type {
+            challenge_entries::ChallengeEntryType::HackableBillboard => {
+                if let Ok(stats) = serde_json::from_value(user_stats) {
+                    results.push(Entry::Challenge(ChallengeEntry::HackableBillboard {
+                        challenge_id: entry.challenge_id,
+                        stats,
+                    }));
+                }
+            }
+            challenge_entries::ChallengeEntryType::RunnersRoute => {
+                if let Ok(stats) = serde_json::from_value(user_stats) {
+                    results.push(Entry::Challenge(ChallengeEntry::RunnersRoute {
+                        challenge_id: entry.challenge_id,
+                        stats,
+                    }));
+                }
+            }
+        }
+    }
 
-        match entry_type {
-            entries::EntryType::ReachThis => {
-                if let (Some(user_id), Some(id), Ok(stats)) = (
-                    entry.ugc_author_id,
-                    entry.ugc_id,
-                    serde_json::from_value(user_stats),
-                ) {
+    for entry in ugc_entries_list {
+        let user_stats = entry.user_stats;
+        let author_id = ugc_models
+            .get(&entry.ugc_id)
+            .map(|u| u.author_id)
+            .unwrap_or(0);
+
+        match entry.entry_type {
+            ugc_entries::UgcEntryType::ReachThis => {
+                if let Ok(stats) = serde_json::from_value(user_stats) {
                     results.push(Entry::Ugc(UgcEntry::ReachThis {
                         ugc_id: UgcId {
-                            user_id,
-                            id: id.to_string(),
+                            user_id: author_id,
+                            id: entry.ugc_id.to_string(),
                         },
                         stats,
                     }));
                 }
             }
-            entries::EntryType::TimeTrial => {
-                if let (Some(user_id), Some(id), Ok(stats)) = (
-                    entry.ugc_author_id,
-                    entry.ugc_id,
-                    serde_json::from_value(user_stats),
-                ) {
+            ugc_entries::UgcEntryType::TimeTrial => {
+                if let Ok(stats) = serde_json::from_value(user_stats) {
                     results.push(Entry::Ugc(UgcEntry::TimeTrial {
                         ugc_id: UgcId {
-                            user_id,
-                            id: id.to_string(),
+                            user_id: author_id,
+                            id: entry.ugc_id.to_string(),
                         },
-                        stats,
-                    }));
-                }
-            }
-            entries::EntryType::HackableBillboard => {
-                if let (Some(challenge_id), Ok(stats)) =
-                    (entry.challenge_id, serde_json::from_value(user_stats))
-                {
-                    results.push(Entry::Challenge(ChallengeEntry::HackableBillboard {
-                        challenge_id,
-                        stats,
-                    }));
-                }
-            }
-            entries::EntryType::RunnersRoute => {
-                if let (Some(challenge_id), Ok(stats)) =
-                    (entry.challenge_id, serde_json::from_value(user_stats))
-                {
-                    results.push(Entry::Challenge(ChallengeEntry::RunnersRoute {
-                        challenge_id,
                         stats,
                     }));
                 }

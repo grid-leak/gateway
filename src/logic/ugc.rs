@@ -2,9 +2,10 @@ use crate::{
     context::GatewayContext,
     entities::{
         challenge_bookmarks,
-        entries::{self, EntryType},
         ugc::{self, UgcType},
-        ugc_bookmarks, users,
+        ugc_bookmarks,
+        ugc_entries::{self, UgcEntryType},
+        users,
     },
     logic::game_data::{BatchUgcLoader, UgcFlags},
     methods::map_err,
@@ -22,7 +23,7 @@ use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter,
     QueryOrder, QuerySelect, Set,
-    sea_query::{Alias, Expr, JoinType, OnConflict, PostgresQueryBuilder, Query},
+    sea_query::{Alias, Expr, JoinType, PostgresQueryBuilder, Query},
 };
 use std::{
     collections::{HashMap, HashSet},
@@ -247,39 +248,50 @@ pub async fn create_reach_this(
     Ok(ugc_model.into_meta(&user.name, &UgcFlags::default()))
 }
 
-// TODO: update existing entry
 pub async fn finish_reach_this(
     ctx: &GatewayContext,
     persona_id: i32,
     ugc_id: String,
-    ugc_author_id: i32,
 ) -> Result<ReachThisWrapper, jsonrpsee::types::ErrorObjectOwned> {
     let db = ctx.db();
     let now = chrono::Utc::now();
     let ugc_uuid = Uuid::from_str(&ugc_id).map_err(|_| map_err("Invalid UGC UUID"))?;
 
-    entries::Entity::insert(entries::ActiveModel {
+    ugc_entries::Entity::insert(ugc_entries::ActiveModel {
         user_id: Set(persona_id),
-        ugc_id: Set(Some(ugc_uuid)),
-        ugc_author_id: Set(Some(ugc_author_id)),
-        challenge_id: Set(None),
-        entry_type: Set(EntryType::ReachThis),
+        ugc_id: Set(ugc_uuid),
+        entry_type: Set(UgcEntryType::ReachThis),
         completed_at: Set(now),
         user_stats: Set(serde_json::Value::Null),
         score: Set(0),
         ..Default::default()
     })
     .on_conflict(
-        OnConflict::columns([entries::Column::UserId, entries::Column::UgcId])
-            .update_column(entries::Column::CompletedAt)
-            .to_owned(),
+        sea_orm::sea_query::OnConflict::columns([
+            ugc_entries::Column::UserId,
+            ugc_entries::Column::UgcId,
+        ])
+        .update_column(ugc_entries::Column::CompletedAt)
+        .to_owned(),
     )
     .exec(db)
     .await
     .map_err(map_err)?;
 
+    // UGC Meta needs to be returned in the response or
+    // the game will erase the Beat LE from the map
+    let ugc_model = ugc::Entity::find_by_id(ugc_uuid)
+        .one(db)
+        .await
+        .map_err(map_err)?
+        .ok_or_else(|| map_err("UGC not found"))?;
+
+    let batch_loader = BatchUgcLoader::load(db, persona_id, &[&ugc_model]).await?;
+    let author_name = batch_loader.get_author(ugc_model.author_id);
+    let flags = batch_loader.get_flag(&ugc_model.id);
+
     Ok(ReachThisWrapper {
-        meta: None,
+        meta: Some(ugc_model.into_meta(author_name, &flags)),
         stats: None,
         user_stats: Some(ReachThisUserStats {
             reached_at: now.timestamp_millis().to_string(),
@@ -293,13 +305,11 @@ pub async fn finish_reach_this(
 }
 
 #[derive(Debug, FromQueryResult)]
-struct CountResult {
+struct UgcCountResult {
     ugc_id: Option<Uuid>,
     count: i64,
 }
 
-// FIXME:
-// ErrorObject { code: InternalError, message: \"Query Error: error returned from database: operator does not exist: entry_type = text\", data: None }
 pub async fn get_reach_this_data(
     ctx: &Arc<GatewayContext>,
     ugc_ids: Vec<String>,
@@ -314,7 +324,7 @@ pub async fn get_reach_this_data(
     let mut responses = Vec::with_capacity(ugc_ids.len());
     let requested_ids: Vec<Uuid> = ugc_ids
         .iter()
-        .filter_map(|u| Uuid::from_str(&u).ok())
+        .filter_map(|u| Uuid::from_str(u).ok())
         .collect();
 
     // 1. Fetch User Stats & Ranks if requested
@@ -324,29 +334,27 @@ pub async fn get_reach_this_data(
 
     if data_types.contains(&"USER_STATS".to_string()) {
         // Fetch user entries
-        let user_entries = entries::Entity::find()
-            .filter(entries::Column::UserId.eq(persona_id))
-            .filter(entries::Column::UgcId.is_in(requested_ids.clone()))
-            .filter(entries::Column::EntryType.eq(EntryType::ReachThis))
+        let user_entries = ugc_entries::Entity::find()
+            .filter(ugc_entries::Column::UserId.eq(persona_id))
+            .filter(ugc_entries::Column::UgcId.is_in(requested_ids.clone()))
+            .filter(ugc_entries::Column::EntryType.eq(UgcEntryType::ReachThis))
             .all(db)
             .await
             .map_err(map_err)?;
 
         for entry in user_entries {
-            if let Some(uid) = entry.ugc_id {
-                user_stats_map.insert(uid, entry);
-            }
+            user_stats_map.insert(entry.ugc_id, entry);
         }
 
         // Fetch totals
-        let totals: Vec<CountResult> = entries::Entity::find()
+        let totals: Vec<UgcCountResult> = ugc_entries::Entity::find()
             .select_only()
-            .column(entries::Column::UgcId)
-            .column_as(entries::Column::Id.count(), "count")
-            .filter(entries::Column::UgcId.is_in(requested_ids.clone()))
-            .filter(entries::Column::EntryType.eq(EntryType::ReachThis))
-            .group_by(entries::Column::UgcId)
-            .into_model::<CountResult>()
+            .column(ugc_entries::Column::UgcId)
+            .column_as(ugc_entries::Column::Id.count(), "count")
+            .filter(ugc_entries::Column::UgcId.is_in(requested_ids.clone()))
+            .filter(ugc_entries::Column::EntryType.eq(UgcEntryType::ReachThis))
+            .group_by(ugc_entries::Column::UgcId)
+            .into_model::<UgcCountResult>()
             .all(db)
             .await
             .map_err(map_err)?;
@@ -362,10 +370,10 @@ pub async fn get_reach_this_data(
             let t1 = Alias::new("t1");
             let t2 = Alias::new("t2");
 
-            let t1_id = (t1.clone(), entries::Column::UgcId);
-            let t2_id = (t2.clone(), entries::Column::UgcId);
-            let t1_score = (t1.clone(), entries::Column::CompletedAt);
-            let t2_score = (t2.clone(), entries::Column::CompletedAt);
+            let t1_id = (t1.clone(), ugc_entries::Column::UgcId);
+            let t2_id = (t2.clone(), ugc_entries::Column::UgcId);
+            let t1_score = (t1.clone(), ugc_entries::Column::CompletedAt);
+            let t2_score = (t2.clone(), ugc_entries::Column::CompletedAt);
 
             // Count how many people have completed_at < my completed_at
             let join_condition = Expr::col(t1_id.clone())
@@ -376,27 +384,28 @@ pub async fn get_reach_this_data(
             query
                 .column(t1_id.clone())
                 .expr_as(
-                    Expr::col((t2.clone(), entries::Column::Id)).count(),
+                    Expr::col((t2.clone(), ugc_entries::Column::Id)).count(),
                     "count",
                 )
-                .from_as(entries::Entity, t1.clone())
+                .from_as(ugc_entries::Entity, t1.clone())
                 .join_as(
                     JoinType::LeftJoin,
-                    entries::Entity,
+                    ugc_entries::Entity,
                     t2.clone(),
                     join_condition,
                 )
-                .and_where(Expr::col((t1.clone(), entries::Column::UserId)).eq(persona_id))
+                .and_where(Expr::col((t1.clone(), ugc_entries::Column::UserId)).eq(persona_id))
                 .and_where(Expr::col(t1_id.clone()).is_in(requested_ids.clone()))
                 .and_where(
-                    Expr::col((t1.clone(), entries::Column::EntryType))
-                        .eq(Expr::val(EntryType::ReachThis).cast_as(Alias::new("entry_type"))),
+                    Expr::col((t1.clone(), ugc_entries::Column::EntryType))
+                        .eq(Expr::val(UgcEntryType::ReachThis)
+                            .cast_as(Alias::new("ugc_entry_type"))),
                 )
                 .group_by_col(t1_id);
 
             let (sql, values) = query.build(PostgresQueryBuilder);
 
-            let rank_results = CountResult::find_by_statement(
+            let rank_results = UgcCountResult::find_by_statement(
                 sea_orm::Statement::from_sql_and_values(DbBackend::Postgres, &sql, values),
             )
             .all(db)
@@ -489,10 +498,10 @@ pub async fn get_overview_reach_this_leaderboard(
 
     // We need: (user_id, completed_at, rank)
 
-    let all_entries = entries::Entity::find()
-        .filter(entries::Column::UgcId.eq(ugc_uuid))
-        .filter(entries::Column::EntryType.eq(EntryType::ReachThis))
-        .order_by_asc(entries::Column::CompletedAt)
+    let all_entries = ugc_entries::Entity::find()
+        .filter(ugc_entries::Column::UgcId.eq(ugc_uuid))
+        .filter(ugc_entries::Column::EntryType.eq(UgcEntryType::ReachThis))
+        .order_by_asc(ugc_entries::Column::CompletedAt)
         .all(db)
         .await
         .map_err(map_err)?;

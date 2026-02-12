@@ -267,7 +267,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         ugc_id: UgcId,
     ) -> RpcResult<ReachThisWrapper> {
         let persona_id = *extensions.get::<i32>().unwrap();
-        logic::ugc::finish_reach_this(&self.ctx, persona_id, ugc_id.id, ugc_id.user_id)
+        logic::ugc::finish_reach_this(&self.ctx, persona_id, ugc_id.id)
             .await
             .map_err(map_err)
     }
