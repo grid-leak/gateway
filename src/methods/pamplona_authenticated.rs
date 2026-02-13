@@ -6,8 +6,8 @@ use crate::{
         customization::GhostDataInput,
         game_data::{
             Entry, HackableBillboardLeader, InitialGameDataResponse, Inventory, Item, Kit,
-            OverviewReachThisLeaderboardResponse, PlayerUgcLimits, ReachThisWrapper,
-            RunnersRouteData, UgcId, UgcMeta,
+            LeaderboardResponse, OverviewReachThisLeaderboardResponse, PlayerUgcLimits,
+            ReachThisWrapper, RunnersRouteData, UgcId, UgcMeta,
         },
         ugc::CreateReachThisMeta,
     },
@@ -100,6 +100,14 @@ pub trait PamplonaAuthenticated {
         ugc_id: UgcId,
         radius: Option<i32>,
     ) -> RpcResult<OverviewReachThisLeaderboardResponse>;
+
+    #[method(name = "getHackableBillboardFriendsLeaderboard", with_extensions)]
+    async fn get_hackable_billboard_friends_leaderboard(
+        &self,
+        challenge_id: String,
+        offset: i64,
+        count: i64,
+    ) -> RpcResult<LeaderboardResponse>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -280,8 +288,30 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     ) -> RpcResult<OverviewReachThisLeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
-        logic::ugc::get_overview_reach_this_leaderboard(&self.ctx, persona_id, ugc_id.id, radius)
-            .await
-            .map_err(map_err)
+        logic::leaderboard::get_overview_reach_this_leaderboard(
+            &self.ctx, persona_id, ugc_id.id, radius,
+        )
+        .await
+        .map_err(map_err)
+    }
+
+    async fn get_hackable_billboard_friends_leaderboard(
+        &self,
+        extensions: &Extensions,
+        challenge_id: String,
+        offset: i64,
+        count: i64,
+    ) -> RpcResult<LeaderboardResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+
+        logic::leaderboard::get_hackable_billboard_friends_leaderboard(
+            &self.ctx,
+            persona_id,
+            challenge_id,
+            offset,
+            count,
+        )
+        .await
+        .map_err(map_err)
     }
 }

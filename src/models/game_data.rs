@@ -257,8 +257,16 @@ pub struct OverviewReachThisLeaderboardResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct LeaderboardResponse {
+    pub leaderboard: LeaderboardWrapper,
+    pub global_leader: Option<LeaderboardUser>,
+    pub global_count: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LeaderboardWrapper {
-    pub area: Option<()>, // Always null in example
+    pub area: Option<()>,
     pub total_count: i64,
     pub users: Vec<LeaderboardUser>,
 }
