@@ -6,7 +6,10 @@ use crate::{
         users,
     },
     methods::map_err,
-    models::game_data::{Division, LeaderboardResponse, LeaderboardUser, LeaderboardWrapper},
+    models::game_data::{
+        Division, LeaderboardResponse, LeaderboardUser, LeaderboardWrapper,
+        OverviewChallengeLeaderboardResponse,
+    },
 };
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use std::{str::FromStr, sync::Arc};
@@ -187,6 +190,172 @@ pub async fn get_hackable_billboard_friends_leaderboard(
             global_rank,
             entry.completed_at.timestamp_millis().to_string(),
         ));
+    }
+
+    Ok(LeaderboardResponse {
+        leaderboard: LeaderboardWrapper {
+            area: None,
+            total_count,
+            users: users_list,
+        },
+        global_leader,
+        global_count: global_count.to_string(),
+    })
+}
+
+// ── RunnersRoute leaderboards ────────────────────────────────────────
+
+pub async fn get_overview_runners_route_leaderboard(
+    ctx: &Arc<GatewayContext>,
+    persona_id: i32,
+    challenge_id: String,
+    radius: i32,
+) -> Result<OverviewChallengeLeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
+    let db = ctx.db();
+    let radius = std::cmp::max(radius, 0);
+
+    // All entries for this challenge, sorted by score ascending (lower time = better)
+    let all_entries = challenge_entries::Entity::find()
+        .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
+        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
+        .order_by_asc(challenge_entries::Column::Score)
+        .find_also_related(users::Entity)
+        .all(db)
+        .await
+        .map_err(map_err)?;
+
+    let total_count = all_entries.len() as i64;
+
+    // Find the requesting user's index
+    let center_index = all_entries
+        .iter()
+        .position(|(_entry, user)| {
+            user.as_ref()
+                .map(|u| u.persona_id == persona_id)
+                .unwrap_or(false)
+        })
+        .map(|idx| idx as i32)
+        .unwrap_or(0);
+
+    let start_index = std::cmp::max(center_index - radius, 0) as usize;
+    let end_index = std::cmp::min(center_index + radius, (total_count - 1).max(0) as i32) as usize;
+
+    let mut users_list = Vec::new();
+
+    if total_count > 0 {
+        for (i, (entry, user_opt)) in all_entries[start_index..=end_index].iter().enumerate() {
+            if let Some(user) = user_opt {
+                let global_rank = (start_index + i) as i32 + 1;
+                users_list.push(user_to_leaderboard_entry(
+                    user,
+                    global_rank,
+                    global_rank,
+                    entry.score.to_string(),
+                ));
+            }
+        }
+    }
+
+    // Global leader is the first entry (lowest score)
+    let global_leader = all_entries.first().and_then(|(entry, user_opt)| {
+        user_opt
+            .as_ref()
+            .map(|user| user_to_leaderboard_entry(user, 1, 1, entry.score.to_string()))
+    });
+
+    Ok(OverviewChallengeLeaderboardResponse {
+        leaderboard: LeaderboardWrapper {
+            area: None,
+            total_count,
+            users: users_list,
+        },
+        global_leader,
+    })
+}
+
+/// TODO: Currently returns the requesting user's own entry only because there
+/// is no friends system yet. Once a friends/followers system is implemented,
+/// this should filter entries to only include the user's friends.
+pub async fn get_runners_route_friends_leaderboard(
+    ctx: &Arc<GatewayContext>,
+    persona_id: i32,
+    challenge_id: String,
+    offset: i64,
+    _count: i64,
+) -> Result<LeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
+    let db = ctx.db();
+
+    let global_count = challenge_entries::Entity::find()
+        .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
+        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
+        .count(db)
+        .await
+        .map_err(map_err)? as i64;
+
+    // Global leader: lowest score (best time)
+    let global_leader_entry = challenge_entries::Entity::find()
+        .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
+        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
+        .order_by_asc(challenge_entries::Column::Score)
+        .find_also_related(users::Entity)
+        .one(db)
+        .await
+        .map_err(map_err)?;
+
+    let global_leader = if let Some((entry, Some(user))) = global_leader_entry {
+        Some(user_to_leaderboard_entry(
+            &user,
+            1,
+            1,
+            entry.score.to_string(),
+        ))
+    } else {
+        None
+    };
+
+    // TODO: Replace with friends-filtered query once friends system is added
+    let user_entry = challenge_entries::Entity::find()
+        .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
+        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
+        .filter(challenge_entries::Column::UserId.eq(persona_id))
+        .find_also_related(users::Entity)
+        .one(db)
+        .await
+        .map_err(map_err)?;
+
+    let mut users_list = Vec::new();
+    let mut total_count: i64 = 0;
+
+    if let Some((entry, Some(user))) = user_entry {
+        // Count how many have a lower (better) score
+        let better_count = challenge_entries::Entity::find()
+            .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
+            .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
+            .filter(challenge_entries::Column::Score.lt(entry.score))
+            .count(db)
+            .await
+            .map_err(map_err)? as i32;
+
+        let global_rank = better_count + 1;
+        let position = (offset as i32) + 1;
+
+        // Calculate percentile: percentage of players the user is better than
+        let percentile = if global_count > 0 {
+            Some(
+                ((global_count as i64 - global_rank as i64) as f64 / global_count as f64 * 100.0)
+                    .floor(),
+            )
+        } else {
+            None
+        };
+
+        total_count = 1; // Only our own entry for now
+
+        let mut lb_user =
+            user_to_leaderboard_entry(&user, position, global_rank, entry.score.to_string());
+        lb_user.percentile = percentile;
+
+        users_list.push(lb_user);
     }
 
     Ok(LeaderboardResponse {

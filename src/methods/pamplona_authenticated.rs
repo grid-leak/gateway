@@ -5,9 +5,10 @@ use crate::{
     models::{
         customization::GhostDataInput,
         game_data::{
-            Entry, HackableBillboardLeader, InitialGameDataResponse, Inventory, Item, Kit,
-            LeaderboardResponse, OverviewReachThisLeaderboardResponse, PlayerUgcLimits,
-            ReachThisWrapper, RunnersRouteData, UgcId, UgcMeta,
+            Division, Entry, HackableBillboardLeader, InitialGameDataResponse, Inventory, Item,
+            Kit, LeaderboardResponse, OverviewChallengeLeaderboardResponse,
+            OverviewReachThisLeaderboardResponse, PlayerUgcLimits, ReachThisWrapper,
+            RunnersRouteData, UgcId, UgcMeta,
         },
         ugc::CreateReachThisMeta,
     },
@@ -108,6 +109,30 @@ pub trait PamplonaAuthenticated {
         offset: i64,
         count: i64,
     ) -> RpcResult<LeaderboardResponse>;
+
+    #[method(name = "getOverviewRunnersRouteLeaderboard", with_extensions)]
+    async fn get_overview_runners_route_leaderboard(
+        &self,
+        challenge_id: String,
+        radius: i32,
+    ) -> RpcResult<OverviewChallengeLeaderboardResponse>;
+
+    #[method(name = "getRunnersRouteFriendsLeaderboard", with_extensions)]
+    async fn get_runners_route_friends_leaderboard(
+        &self,
+        challenge_id: String,
+        count: i64,
+        offset: i64,
+    ) -> RpcResult<LeaderboardResponse>;
+
+    #[method(name = "finishRunnersRoute", with_extensions)]
+    async fn finish_runners_route(
+        &self,
+        challenge_id: String,
+        main_stat: i32,
+        extra_stats: serde_json::Value,
+        run_id: i32,
+    ) -> RpcResult<Division>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -310,6 +335,63 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             challenge_id,
             offset,
             count,
+        )
+        .await
+        .map_err(map_err)
+    }
+
+    async fn get_overview_runners_route_leaderboard(
+        &self,
+        extensions: &Extensions,
+        challenge_id: String,
+        radius: i32,
+    ) -> RpcResult<OverviewChallengeLeaderboardResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+
+        logic::leaderboard::get_overview_runners_route_leaderboard(
+            &self.ctx,
+            persona_id,
+            challenge_id,
+            radius,
+        )
+        .await
+    }
+
+    async fn get_runners_route_friends_leaderboard(
+        &self,
+        extensions: &Extensions,
+        challenge_id: String,
+        count: i64,
+        offset: i64,
+    ) -> RpcResult<LeaderboardResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+
+        logic::leaderboard::get_runners_route_friends_leaderboard(
+            &self.ctx,
+            persona_id,
+            challenge_id,
+            offset,
+            count,
+        )
+        .await
+    }
+
+    async fn finish_runners_route(
+        &self,
+        extensions: &Extensions,
+        challenge_id: String,
+        main_stat: i32,
+        extra_stats: serde_json::Value,
+        run_id: i32,
+    ) -> RpcResult<Division> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::challenge::finish_runners_route(
+            &self.ctx,
+            persona_id,
+            challenge_id,
+            main_stat,
+            extra_stats,
+            run_id,
         )
         .await
         .map_err(map_err)
