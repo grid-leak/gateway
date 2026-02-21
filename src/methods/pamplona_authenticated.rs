@@ -1,14 +1,14 @@
 use crate::{
     context::GatewayContext,
+    entities::challenge_entries::ChallengeEntryType,
     logic,
     methods::map_err,
     models::{
         customization::GhostDataInput,
         game_data::{
             Division, Entry, HackableBillboardLeader, InitialGameDataResponse, Inventory, Item,
-            Kit, LeaderboardResponse, OverviewChallengeLeaderboardResponse,
-            OverviewReachThisLeaderboardResponse, PlayerUgcLimits, ReachThisWrapper,
-            RunnersRouteData, UgcId, UgcMeta,
+            Kit, LeaderboardResponse, OverviewLeaderboardResponse, PlayerUgcLimits,
+            ReachThisWrapper, RunnersRouteData, UgcId, UgcMeta,
         },
         ugc::CreateReachThisMeta,
     },
@@ -18,6 +18,7 @@ use jsonrpsee::{
     core::{RpcResult, async_trait},
 };
 use jsonrpsee_proc_macros::rpc;
+use sea_orm::Order;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -100,7 +101,7 @@ pub trait PamplonaAuthenticated {
         &self,
         ugc_id: UgcId,
         radius: Option<i32>,
-    ) -> RpcResult<OverviewReachThisLeaderboardResponse>;
+    ) -> RpcResult<OverviewLeaderboardResponse>;
 
     #[method(name = "getHackableBillboardFriendsLeaderboard", with_extensions)]
     async fn get_hackable_billboard_friends_leaderboard(
@@ -115,10 +116,18 @@ pub trait PamplonaAuthenticated {
         &self,
         challenge_id: String,
         radius: i32,
-    ) -> RpcResult<OverviewChallengeLeaderboardResponse>;
+    ) -> RpcResult<OverviewLeaderboardResponse>;
 
     #[method(name = "getRunnersRouteFriendsLeaderboard", with_extensions)]
     async fn get_runners_route_friends_leaderboard(
+        &self,
+        challenge_id: String,
+        count: i64,
+        offset: i64,
+    ) -> RpcResult<LeaderboardResponse>;
+
+    #[method(name = "getRunnersRouteLeaderboard", with_extensions)]
+    async fn get_runners_route_leaderboard(
         &self,
         challenge_id: String,
         count: i64,
@@ -310,7 +319,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         extensions: &Extensions,
         ugc_id: UgcId,
         radius: Option<i32>,
-    ) -> RpcResult<OverviewReachThisLeaderboardResponse> {
+    ) -> RpcResult<OverviewLeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
         logic::leaderboard::get_overview_reach_this_leaderboard(
@@ -329,12 +338,15 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     ) -> RpcResult<LeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
-        logic::leaderboard::get_hackable_billboard_friends_leaderboard(
+        logic::leaderboard::get_challenge_leaderboard(
             &self.ctx,
             persona_id,
             challenge_id,
+            ChallengeEntryType::HackableBillboard,
+            Order::Desc,
             offset,
             count,
+            true,
         )
         .await
         .map_err(map_err)
@@ -345,16 +357,19 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         extensions: &Extensions,
         challenge_id: String,
         radius: i32,
-    ) -> RpcResult<OverviewChallengeLeaderboardResponse> {
+    ) -> RpcResult<OverviewLeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
-        logic::leaderboard::get_overview_runners_route_leaderboard(
+        logic::leaderboard::get_overview_challenge_leaderboard(
             &self.ctx,
             persona_id,
             challenge_id,
+            ChallengeEntryType::RunnersRoute,
+            Order::Asc,
             radius,
         )
         .await
+        .map_err(map_err)
     }
 
     async fn get_runners_route_friends_leaderboard(
@@ -366,14 +381,40 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     ) -> RpcResult<LeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
-        logic::leaderboard::get_runners_route_friends_leaderboard(
+        logic::leaderboard::get_challenge_leaderboard(
             &self.ctx,
             persona_id,
             challenge_id,
+            ChallengeEntryType::RunnersRoute,
+            Order::Asc,
             offset,
             count,
+            true,
         )
         .await
+        .map_err(map_err)
+    }
+    async fn get_runners_route_leaderboard(
+        &self,
+        extensions: &Extensions,
+        challenge_id: String,
+        count: i64,
+        offset: i64,
+    ) -> RpcResult<LeaderboardResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+
+        logic::leaderboard::get_challenge_leaderboard(
+            &self.ctx,
+            persona_id,
+            challenge_id,
+            ChallengeEntryType::RunnersRoute,
+            Order::Asc,
+            offset,
+            count,
+            false,
+        )
+        .await
+        .map_err(map_err)
     }
 
     async fn finish_runners_route(

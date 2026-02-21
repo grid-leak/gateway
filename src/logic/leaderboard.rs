@@ -8,10 +8,12 @@ use crate::{
     methods::map_err,
     models::game_data::{
         Division, LeaderboardResponse, LeaderboardUser, LeaderboardWrapper,
-        OverviewChallengeLeaderboardResponse,
+        OverviewLeaderboardResponse,
     },
 };
-use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
+use sea_orm::{
+    ColumnTrait, EntityTrait, Order, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+};
 use std::{str::FromStr, sync::Arc};
 use uuid::Uuid;
 
@@ -40,10 +42,7 @@ pub async fn get_overview_reach_this_leaderboard(
     persona_id: i32,
     ugc_uuid: String,
     radius: Option<i32>,
-) -> Result<
-    crate::models::game_data::OverviewReachThisLeaderboardResponse,
-    jsonrpsee::types::ErrorObjectOwned,
-> {
+) -> Result<OverviewLeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
     let user = users::Entity::find_by_id(persona_id)
         .one(ctx.db())
         .await
@@ -103,122 +102,31 @@ pub async fn get_overview_reach_this_leaderboard(
         None
     };
 
-    Ok(
-        crate::models::game_data::OverviewReachThisLeaderboardResponse {
-            leaderboard: LeaderboardWrapper {
-                area: None,
-                total_count,
-                users: users_list,
-            },
-            global_leader,
-        },
-    )
-}
-
-/// TODO: Currently returns the requesting user's own entry only because there
-/// is no friends system yet. Once a friends/followers system is implemented,
-/// this should filter entries to only include the user's friends and build
-/// a proper friends leaderboard
-pub async fn get_hackable_billboard_friends_leaderboard(
-    ctx: &Arc<GatewayContext>,
-    persona_id: i32,
-    challenge_id: String,
-    offset: i64,
-    _count: i64,
-) -> Result<LeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
-    let db = ctx.db();
-
-    let global_count = challenge_entries::Entity::find()
-        .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
-        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::HackableBillboard))
-        .count(db)
-        .await
-        .map_err(map_err)? as i64;
-
-    let global_leader_entry = challenge_entries::Entity::find()
-        .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
-        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::HackableBillboard))
-        .order_by_desc(challenge_entries::Column::Score)
-        .find_also_related(users::Entity)
-        .one(db)
-        .await
-        .map_err(map_err)?;
-
-    let global_leader = if let Some((entry, Some(user))) = global_leader_entry {
-        Some(user_to_leaderboard_entry(
-            &user,
-            1,
-            1,
-            entry.completed_at.timestamp_millis().to_string(),
-        ))
-    } else {
-        None
-    };
-
-    // TODO: Replace with friends-filtered query once friends system is added
-    let user_entry = challenge_entries::Entity::find()
-        .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
-        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::HackableBillboard))
-        .filter(challenge_entries::Column::UserId.eq(persona_id))
-        .find_also_related(users::Entity)
-        .one(db)
-        .await
-        .map_err(map_err)?;
-
-    let mut users_list = Vec::new();
-    let mut total_count: i64 = 0;
-
-    if let Some((entry, Some(user))) = user_entry {
-        let better_count = challenge_entries::Entity::find()
-            .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
-            .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::HackableBillboard))
-            .filter(challenge_entries::Column::Score.gt(entry.score))
-            .count(db)
-            .await
-            .map_err(map_err)? as i32;
-
-        let global_rank = better_count + 1;
-
-        // TODO: position within friends leaderboard
-        let position = (offset as i32) + 1;
-
-        total_count = 1; // Only our own entry for now
-
-        users_list.push(user_to_leaderboard_entry(
-            &user,
-            position,
-            global_rank,
-            entry.completed_at.timestamp_millis().to_string(),
-        ));
-    }
-
-    Ok(LeaderboardResponse {
+    Ok(OverviewLeaderboardResponse {
         leaderboard: LeaderboardWrapper {
             area: None,
             total_count,
             users: users_list,
         },
         global_leader,
-        global_count: global_count.to_string(),
     })
 }
 
-// ── RunnersRoute leaderboards ────────────────────────────────────────
-
-pub async fn get_overview_runners_route_leaderboard(
+pub async fn get_overview_challenge_leaderboard(
     ctx: &Arc<GatewayContext>,
     persona_id: i32,
     challenge_id: String,
+    entry_type: ChallengeEntryType,
+    score_order: Order,
     radius: i32,
-) -> Result<OverviewChallengeLeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<OverviewLeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
     let db = ctx.db();
     let radius = std::cmp::max(radius, 0);
 
-    // All entries for this challenge, sorted by score ascending (lower time = better)
     let all_entries = challenge_entries::Entity::find()
         .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
-        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
-        .order_by_asc(challenge_entries::Column::Score)
+        .filter(challenge_entries::Column::EntryType.eq(entry_type))
+        .order_by(challenge_entries::Column::Score, score_order)
         .find_also_related(users::Entity)
         .all(db)
         .await
@@ -226,7 +134,6 @@ pub async fn get_overview_runners_route_leaderboard(
 
     let total_count = all_entries.len() as i64;
 
-    // Find the requesting user's index
     let center_index = all_entries
         .iter()
         .position(|(_entry, user)| {
@@ -256,14 +163,13 @@ pub async fn get_overview_runners_route_leaderboard(
         }
     }
 
-    // Global leader is the first entry (lowest score)
     let global_leader = all_entries.first().and_then(|(entry, user_opt)| {
         user_opt
             .as_ref()
             .map(|user| user_to_leaderboard_entry(user, 1, 1, entry.score.to_string()))
     });
 
-    Ok(OverviewChallengeLeaderboardResponse {
+    Ok(OverviewLeaderboardResponse {
         leaderboard: LeaderboardWrapper {
             area: None,
             total_count,
@@ -273,30 +179,34 @@ pub async fn get_overview_runners_route_leaderboard(
     })
 }
 
-/// TODO: Currently returns the requesting user's own entry only because there
+/// TODO: For friends_only, returns the requesting user's own entry only because there
 /// is no friends system yet. Once a friends/followers system is implemented,
 /// this should filter entries to only include the user's friends.
-pub async fn get_runners_route_friends_leaderboard(
+pub async fn get_challenge_leaderboard(
     ctx: &Arc<GatewayContext>,
     persona_id: i32,
     challenge_id: String,
+    entry_type: ChallengeEntryType,
+    score_order: Order,
     offset: i64,
-    _count: i64,
+    count: i64,
+    friends_only: bool,
 ) -> Result<LeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
     let db = ctx.db();
 
+    // 1. Global Count
     let global_count = challenge_entries::Entity::find()
         .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
-        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
+        .filter(challenge_entries::Column::EntryType.eq(entry_type.clone()))
         .count(db)
         .await
         .map_err(map_err)? as i64;
 
-    // Global leader: lowest score (best time)
+    // 2. Global Leader
     let global_leader_entry = challenge_entries::Entity::find()
         .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
-        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
-        .order_by_asc(challenge_entries::Column::Score)
+        .filter(challenge_entries::Column::EntryType.eq(entry_type.clone()))
+        .order_by(challenge_entries::Column::Score, score_order.clone())
         .find_also_related(users::Entity)
         .one(db)
         .await
@@ -313,49 +223,104 @@ pub async fn get_runners_route_friends_leaderboard(
         None
     };
 
-    // TODO: Replace with friends-filtered query once friends system is added
-    let user_entry = challenge_entries::Entity::find()
-        .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
-        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
-        .filter(challenge_entries::Column::UserId.eq(persona_id))
-        .find_also_related(users::Entity)
-        .one(db)
-        .await
-        .map_err(map_err)?;
-
     let mut users_list = Vec::new();
     let mut total_count: i64 = 0;
 
-    if let Some((entry, Some(user))) = user_entry {
-        // Count how many have a lower (better) score
-        let better_count = challenge_entries::Entity::find()
+    if friends_only {
+        // TODO: Replace with friends-filtered query once friends system is added
+        // Existing behavior: Return ONLY the current user
+        let user_entry = challenge_entries::Entity::find()
             .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
-            .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
-            .filter(challenge_entries::Column::Score.lt(entry.score))
-            .count(db)
+            .filter(challenge_entries::Column::EntryType.eq(entry_type.clone()))
+            .filter(challenge_entries::Column::UserId.eq(persona_id))
+            .find_also_related(users::Entity)
+            .one(db)
             .await
-            .map_err(map_err)? as i32;
+            .map_err(map_err)?;
 
-        let global_rank = better_count + 1;
-        let position = (offset as i32) + 1;
+        if let Some((entry, Some(user))) = user_entry {
+            // Count how many have a better score than the user to determine rank
+            let better_count = match score_order {
+                Order::Asc => {
+                    // Lower is better → count entries with score < user's score
+                    challenge_entries::Entity::find()
+                        .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
+                        .filter(challenge_entries::Column::EntryType.eq(entry_type))
+                        .filter(challenge_entries::Column::Score.lt(entry.score))
+                        .count(db)
+                        .await
+                        .map_err(map_err)? as i32
+                }
+                Order::Desc => {
+                    // Higher is better → count entries with score > user's score
+                    challenge_entries::Entity::find()
+                        .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
+                        .filter(challenge_entries::Column::EntryType.eq(entry_type))
+                        .filter(challenge_entries::Column::Score.gt(entry.score))
+                        .count(db)
+                        .await
+                        .map_err(map_err)? as i32
+                }
+                _ => 0,
+            };
 
-        // Calculate percentile: percentage of players the user is better than
-        let percentile = if global_count > 0 {
-            Some(
-                ((global_count as i64 - global_rank as i64) as f64 / global_count as f64 * 100.0)
-                    .floor(),
-            )
-        } else {
-            None
-        };
+            let global_rank = better_count + 1;
+            // logic::leaderboard::get_challenge_friends_leaderboard assumes
+            // the returned list position is relative to the requested offset if it was a list
+            // but for "friends only" (single user), position is often just 1 or based on offset?
+            // In the original code: `let position = (offset as i32) + 1;`
+            let position = (offset as i32) + 1;
 
-        total_count = 1; // Only our own entry for now
+            // Calculate percentile: percentage of players the user is better than
+            let percentile = if global_count > 0 {
+                Some(
+                    ((global_count as i64 - global_rank as i64) as f64 / global_count as f64
+                        * 100.0)
+                        .floor(),
+                )
+            } else {
+                None
+            };
 
-        let mut lb_user =
-            user_to_leaderboard_entry(&user, position, global_rank, entry.score.to_string());
-        lb_user.percentile = percentile;
+            total_count = 1; // Only our own entry for now
 
-        users_list.push(lb_user);
+            let mut lb_user =
+                user_to_leaderboard_entry(&user, position, global_rank, entry.score.to_string());
+            lb_user.percentile = percentile;
+
+            users_list.push(lb_user);
+        }
+    } else {
+        // Return top N entries (paginated by offset/count)
+        let entries = challenge_entries::Entity::find()
+            .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
+            .filter(challenge_entries::Column::EntryType.eq(entry_type.clone()))
+            .order_by(challenge_entries::Column::Score, score_order)
+            .offset(offset as u64)
+            .limit(count as u64)
+            .find_also_related(users::Entity)
+            .all(db)
+            .await
+            .map_err(map_err)?;
+
+        // total_count for this logic often implies the *returned* count or the *total available*?
+        // LeaderboardWrapper usually wants the total count of the list being returned or the scope.
+        // In `get_overview_challenge_leaderboard`, total_count is the length of `all_entries`.
+        // Let's set it to the count of users we are returning.
+        total_count = entries.len() as i64;
+
+        for (i, (entry, user_opt)) in entries.iter().enumerate() {
+            if let Some(user) = user_opt {
+                let rank = (offset as i32) + (i as i32) + 1;
+                // For a straight list, position = rank usually
+                users_list.push(user_to_leaderboard_entry(
+                    user,
+                    rank,
+                    rank,
+                    entry.score.to_string(),
+                ));
+            }
+        }
     }
 
     Ok(LeaderboardResponse {

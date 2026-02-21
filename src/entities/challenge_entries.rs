@@ -3,7 +3,7 @@ use sea_orm::entity::prelude::*;
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
 #[sea_orm(
     rs_type = "String",
-    db_type = "Enum",
+    db_type = "String(StringLen::None)",
     enum_name = "challenge_entry_type"
 )]
 pub enum ChallengeEntryType {

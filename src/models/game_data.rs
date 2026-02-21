@@ -67,7 +67,6 @@ pub struct UgcWrapper {
     pub user_rank: Option<()>,
 }
 
-// TODO: make universal
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReachThisWrapper {
@@ -250,14 +249,7 @@ pub struct PlayerUgcLimits {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct OverviewReachThisLeaderboardResponse {
-    pub leaderboard: LeaderboardWrapper,
-    pub global_leader: Option<LeaderboardUser>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OverviewChallengeLeaderboardResponse {
+pub struct OverviewLeaderboardResponse {
     pub leaderboard: LeaderboardWrapper,
     pub global_leader: Option<LeaderboardUser>,
 }

@@ -10,7 +10,9 @@ use crate::{
     },
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter, QueryOrder, QuerySelect, Set, sea_query::{Alias, Expr, JoinType, OnConflict, PostgresQueryBuilder, Query}
+    ActiveEnum, ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult,
+    QueryFilter, QueryOrder, QuerySelect, Set,
+    sea_query::{Alias, Expr, JoinType, OnConflict, PostgresQueryBuilder, Query},
 };
 use std::collections::HashMap;
 use std::sync::Arc;
