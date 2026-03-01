@@ -558,11 +558,10 @@ pub async fn finish_runners_route(
 
     let division = calculate_division(total_stars);
 
-    let mut user: users::ActiveModel = users::Entity::find_by_id(persona_id)
-        .one(db)
+    let mut user: users::ActiveModel = ctx
+        .user(persona_id)
         .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "User not found".to_string())?
+        .map_err(|e| e.message().to_string())?
         .into();
 
     user.division_name = Set(division.name.clone());

@@ -43,11 +43,7 @@ pub async fn get_overview_reach_this_leaderboard(
     ugc_uuid: String,
     radius: Option<i32>,
 ) -> Result<OverviewLeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
-    let user = users::Entity::find_by_id(persona_id)
-        .one(ctx.db())
-        .await
-        .map_err(map_err)?
-        .ok_or_else(|| map_err("User not found"))?;
+    let user = ctx.user(persona_id).await?;
 
     let db = ctx.db();
     let ugc_uuid = Uuid::from_str(&ugc_uuid).map_err(map_err)?;

@@ -5,7 +5,6 @@ use crate::{
         ugc::{self, UgcType},
         ugc_bookmarks,
         ugc_entries::{self, UgcEntryType},
-        users,
     },
     logic::game_data::{BatchUgcLoader, UgcFlags},
     methods::map_err,
@@ -43,11 +42,7 @@ pub async fn get_initial_game_data(
     let skip_ugc = level_id != LEVEL_ID_HASH as u32;
 
     // Fetch User
-    let user = users::Entity::find_by_id(persona_id)
-        .one(db)
-        .await
-        .map_err(map_err)?
-        .ok_or_else(|| map_err("User not found"))?;
+    let user = ctx.user(persona_id).await?;
 
     // Define queries
     let reach_this_query = ugc::Entity::find()
@@ -216,11 +211,7 @@ pub async fn create_reach_this(
         ));
     }
 
-    let user = users::Entity::find_by_id(author_id)
-        .one(db)
-        .await
-        .map_err(map_err)?
-        .ok_or_else(|| map_err("User not found"))?;
+    let user = ctx.user(author_id).await?;
 
     let now = Utc::now();
     let new_id = Uuid::new_v4();

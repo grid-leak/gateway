@@ -1,12 +1,8 @@
 use std::sync::Arc;
 
-use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use sea_orm::{ActiveModelTrait, Set};
 
-use crate::{
-    context::GatewayContext,
-    entities::{users, users::ActiveModel},
-    methods::map_err,
-};
+use crate::{context::GatewayContext, entities::users::ActiveModel, methods::map_err};
 
 const VALID_STATS_KEYS: &[&str] = &[
     "pf_AmbPh3Dt01_Available",
@@ -783,13 +779,7 @@ pub async fn get_persona_stats(
     ctx: &Arc<GatewayContext>,
     persona_id: i32,
 ) -> Result<serde_json::Map<String, serde_json::Value>, jsonrpsee::types::ErrorObjectOwned> {
-    let db = ctx.db();
-
-    let user = users::Entity::find_by_id(persona_id)
-        .one(db)
-        .await
-        .map_err(map_err)?
-        .ok_or_else(|| map_err("User not found"))?;
+    let user = ctx.user(persona_id).await?;
 
     let stats = user.stats.as_object().cloned().unwrap_or_default();
 
@@ -832,11 +822,7 @@ pub async fn update_persona_stats(
 ) -> Result<String, jsonrpsee::types::ErrorObjectOwned> {
     let db = ctx.db();
 
-    let user = users::Entity::find_by_id(persona_id)
-        .one(db)
-        .await
-        .map_err(map_err)?
-        .ok_or_else(|| map_err("User not found"))?;
+    let user = ctx.user(persona_id).await?;
 
     let mut current_stats = user.stats.clone();
 

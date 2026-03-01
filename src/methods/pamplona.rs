@@ -94,17 +94,7 @@ impl PamplonaServer for PamplonaImpl {
     }
 
     async fn get_player_tag(&self, persona_id: i32) -> RpcResult<TagData> {
-        let user = users::Entity::find_by_id(persona_id)
-            .one(self.ctx.db())
-            .await
-            .map_err(map_err)?
-            .ok_or_else(|| {
-                jsonrpsee::types::ErrorObject::owned(
-                    jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                    "User not found",
-                    None::<()>,
-                )
-            })?;
+        let user = self.ctx.user(persona_id).await?;
 
         let tag_data: TagData = serde_json::from_value(user.tag_data).map_err(|e| {
             jsonrpsee::types::ErrorObject::owned(

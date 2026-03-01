@@ -1,13 +1,10 @@
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use std::sync::Arc;
 use uuid::Uuid;
 
 use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee_proc_macros::rpc;
 
-use crate::{
-    context::GatewayContext, entities::users, methods::map_err, models::auth::AuthResponse,
-};
+use crate::{context::GatewayContext, models::auth::AuthResponse};
 
 // TODO: web companion uses "BeatAuthentication", while the game uses "Authentication"
 #[rpc(server, namespace = "Authentication", namespace_separator = ".")]
@@ -32,22 +29,8 @@ impl AuthenticationServer for AuthenticationImpl {
         // TODO: Implement actual auth code validation logic
         // For now, fetch the first user from the database
 
-        let user_opt = users::Entity::find()
-            .filter(users::Column::PersonaId.eq(1011786733))
-            .one(self.ctx.db())
-            .await
-            .map_err(map_err)?;
-
-        let persona_id = match user_opt {
-            Some(user) => user.persona_id,
-            None => {
-                return Err(jsonrpsee::types::ErrorObject::owned(
-                    -32502,
-                    "Authentication failed",
-                    None::<()>,
-                ));
-            }
-        };
+        let user = self.ctx.user(1011786733).await?;
+        let persona_id = user.persona_id;
 
         let session_id = Uuid::new_v4().to_string();
 
