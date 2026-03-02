@@ -27,34 +27,10 @@ struct RunnersRouteThreshold {
 
 static RUNNERS_ROUTE_THRESHOLDS: &[RunnersRouteThreshold] = &[
     RunnersRouteThreshold {
-        id: "ch_rrt_tv2_time",
-        threshold_1star: 4600,
-        threshold_2star: 3800,
-        threshold_3star: 3500,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_rz3_time",
-        threshold_1star: 2650,
-        threshold_2star: 2300,
-        threshold_3star: 2100,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_anc4_time",
-        threshold_1star: 8000,
-        threshold_2star: 4750,
-        threshold_3star: 3600,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_trtt1_time",
-        threshold_1star: 2000,
-        threshold_2star: 1500,
-        threshold_3star: 1000,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_dt5_time",
-        threshold_1star: 6400,
-        threshold_2star: 5800,
-        threshold_3star: 4600,
+        id: "ch_rrt_anc1_time",
+        threshold_1star: 4400,
+        threshold_2star: 4100,
+        threshold_3star: 1400,
     },
     RunnersRouteThreshold {
         id: "ch_rrt_anc2_time",
@@ -63,16 +39,16 @@ static RUNNERS_ROUTE_THRESHOLDS: &[RunnersRouteThreshold] = &[
         threshold_3star: 2350,
     },
     RunnersRouteThreshold {
-        id: "ch_rrt_dte3_time",
-        threshold_1star: 6000,
-        threshold_2star: 5000,
-        threshold_3star: 4000,
+        id: "ch_rrt_anc3_time",
+        threshold_1star: 5800,
+        threshold_2star: 5100,
+        threshold_3star: 3750,
     },
     RunnersRouteThreshold {
-        id: "ch_rrt_anc6_time",
-        threshold_1star: 3300,
-        threshold_2star: 2900,
-        threshold_3star: 2400,
+        id: "ch_rrt_anc4_time",
+        threshold_1star: 8000,
+        threshold_2star: 4750,
+        threshold_3star: 3600,
     },
     RunnersRouteThreshold {
         id: "ch_rrt_anc5_time",
@@ -81,16 +57,16 @@ static RUNNERS_ROUTE_THRESHOLDS: &[RunnersRouteThreshold] = &[
         threshold_3star: 12900,
     },
     RunnersRouteThreshold {
-        id: "ch_rrt_mcity1_time",
-        threshold_1star: 6000,
-        threshold_2star: 5000,
-        threshold_3star: 4000,
+        id: "ch_rrt_anc6_time",
+        threshold_1star: 3300,
+        threshold_2star: 2900,
+        threshold_3star: 2400,
     },
     RunnersRouteThreshold {
-        id: "ch_rrt_tv3_time",
-        threshold_1star: 9500,
-        threshold_2star: 7400,
-        threshold_3star: 6450,
+        id: "ch_rrt_bm1_time",
+        threshold_1star: 5600,
+        threshold_2star: 4800,
+        threshold_3star: 4000,
     },
     RunnersRouteThreshold {
         id: "ch_rrt_dt1_time",
@@ -105,76 +81,28 @@ static RUNNERS_ROUTE_THRESHOLDS: &[RunnersRouteThreshold] = &[
         threshold_3star: 3250,
     },
     RunnersRouteThreshold {
-        id: "ch_rrt_bm1_time",
-        threshold_1star: 5600,
-        threshold_2star: 4800,
-        threshold_3star: 4000,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_anc1_time",
-        threshold_1star: 4400,
-        threshold_2star: 4100,
-        threshold_3star: 1400,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_dt6_time",
-        threshold_1star: 4400,
-        threshold_2star: 3800,
-        threshold_3star: 3400,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_truxrr1_time",
-        threshold_1star: 1500,
-        threshold_2star: 1000,
-        threshold_3star: 500,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_tv04_time",
-        threshold_1star: 11800,
-        threshold_2star: 8600,
-        threshold_3star: 5700,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_trtt2_time",
-        threshold_1star: 3000,
-        threshold_2star: 2000,
-        threshold_3star: 1000,
-    },
-    RunnersRouteThreshold {
         id: "ch_rrt_dt3_time",
         threshold_1star: 4200,
         threshold_2star: 3400,
         threshold_3star: 1900,
     },
     RunnersRouteThreshold {
-        id: "ch_rrt_anc3_time",
-        threshold_1star: 5800,
-        threshold_2star: 5100,
-        threshold_3star: 3750,
+        id: "ch_rrt_dt4_time",
+        threshold_1star: 6200,
+        threshold_2star: 5200,
+        threshold_3star: 4400,
     },
     RunnersRouteThreshold {
-        id: "ch_rrt_demo1_time",
-        threshold_1star: 6000,
-        threshold_2star: 5000,
-        threshold_3star: 4000,
+        id: "ch_rrt_dt5_time",
+        threshold_1star: 6400,
+        threshold_2star: 5800,
+        threshold_3star: 4600,
     },
     RunnersRouteThreshold {
-        id: "ch_rrt_tv05_time",
-        threshold_1star: 14200,
-        threshold_2star: 10600,
-        threshold_3star: 9600,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_rz4_time",
-        threshold_1star: 2800,
-        threshold_2star: 2500,
-        threshold_3star: 2150,
-    },
-    RunnersRouteThreshold {
-        id: "ch_rrt_tv1_time",
-        threshold_1star: 6800,
-        threshold_2star: 5900,
-        threshold_3star: 5500,
+        id: "ch_rrt_dt6_time",
+        threshold_1star: 4400,
+        threshold_2star: 3800,
+        threshold_3star: 3400,
     },
     RunnersRouteThreshold {
         id: "ch_rrt_rz1_time",
@@ -189,10 +117,46 @@ static RUNNERS_ROUTE_THRESHOLDS: &[RunnersRouteThreshold] = &[
         threshold_3star: 4050,
     },
     RunnersRouteThreshold {
-        id: "ch_rrt_dt4_time",
-        threshold_1star: 6200,
-        threshold_2star: 5200,
-        threshold_3star: 4400,
+        id: "ch_rrt_rz3_time",
+        threshold_1star: 2650,
+        threshold_2star: 2300,
+        threshold_3star: 2100,
+    },
+    RunnersRouteThreshold {
+        id: "ch_rrt_rz4_time",
+        threshold_1star: 2800,
+        threshold_2star: 2500,
+        threshold_3star: 2150,
+    },
+    RunnersRouteThreshold {
+        id: "ch_rrt_tv04_time",
+        threshold_1star: 11800,
+        threshold_2star: 8600,
+        threshold_3star: 5700,
+    },
+    RunnersRouteThreshold {
+        id: "ch_rrt_tv05_time",
+        threshold_1star: 14200,
+        threshold_2star: 10600,
+        threshold_3star: 9600,
+    },
+    RunnersRouteThreshold {
+        id: "ch_rrt_tv1_time",
+        threshold_1star: 6800,
+        threshold_2star: 5900,
+        threshold_3star: 5500,
+    },
+    RunnersRouteThreshold {
+        id: "ch_rrt_tv2_time",
+        threshold_1star: 4600,
+        threshold_2star: 3800,
+        threshold_3star: 3500,
+    },
+    RunnersRouteThreshold {
+        id: "ch_rrt_tv3_time",
+        threshold_1star: 9500,
+        threshold_2star: 7400,
+        threshold_3star: 6450,
     },
 ];
 
@@ -439,12 +403,11 @@ fn calculate_stars(challenge_id: &str, score: i32) -> u32 {
 }
 
 // Calculate division from total stars across all RunnersRoute challenges
-// Max possible 84 stars (28 challenges x 3 stars)
+// Max possible 66 stars (22 challenges x 3 stars)
 fn calculate_division(total_stars: u32) -> Division {
-    // Each division has 5 ranks, each rank covers ~3.36 stars
-    // Use ceiling division so even 1 star gets you into Copper 4
+    // Each division has 5 ranks, each rank covers a portion of total possible stars
     const DIVISIONS: [&str; 5] = ["Copper", "Bronze", "Silver", "Gold", "Red"];
-    const STARS_PER_RANK: f64 = 84.0 / 25.0; // ~3.36
+    let stars_per_rank = (RUNNERS_ROUTE_THRESHOLDS.len() as f64 * 3.0) / 25.0;
 
     if total_stars == 0 {
         return Division {
@@ -454,7 +417,7 @@ fn calculate_division(total_stars: u32) -> Division {
     }
 
     let tier = std::cmp::min(
-        ((total_stars as f64) / STARS_PER_RANK).ceil() as u32 - 1,
+        ((total_stars as f64) / stars_per_rank).ceil() as u32 - 1,
         24,
     );
     let division_index = (tier / 5) as usize;
