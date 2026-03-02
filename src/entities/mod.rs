@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod challenge_bookmarks;
 pub mod challenge_entries;
 pub mod ugc;

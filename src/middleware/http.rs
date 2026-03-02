@@ -150,12 +150,15 @@ where
                     SessionType::Identified(id) => id.clone(),
                     SessionType::Unknown => {
                         tracing::warn!("Encrypted request without session ID");
+                        println!("Encrypted request without session ID");
                         // Cannot decrypt without session ID
                         let mut new_req = Request::from_parts(parts, Full::new(body_bytes));
                         new_req.extensions_mut().insert(session);
                         return inner.call(new_req).await;
                     }
                 };
+
+                println!("found session_id={session_id}");
 
                 // Decrypt the payload
                 match decrypt_payload(&body_bytes, &session_id) {

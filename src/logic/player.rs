@@ -26,12 +26,13 @@ pub async fn set_player_ghost(
 
     let mut user: users::ActiveModel = user.into();
 
-    user.ghost_variation = Set(data.customization.variation);
-
     // ignore the provided timestamp and set the current time
-    let timestamp = Utc::now();
+    let timestamp = Utc::now().timestamp();
 
-    user.ghost_timestamp = Set(timestamp);
+    user.ghost_data = Set(serde_json::json!({
+        "variation": data.customization.variation,
+        "timestamp": timestamp,
+    }));
 
     user.update(ctx.db()).await?;
 
@@ -69,8 +70,15 @@ pub async fn get_player_ghosts(
     let ghosts = users
         .into_iter()
         .map(|user| {
-            let variation = user.ghost_variation.to_string();
-            let timestamp_val = (user.ghost_timestamp.timestamp_millis() / 1000).to_string();
+            // TODO: fix weird syntax
+            let variation = user.ghost_data["variation"]
+                .as_i64()
+                .unwrap_or(244578012)
+                .to_string();
+            let timestamp_val = user.ghost_data["timestamp"]
+                .as_i64()
+                .unwrap_or(0)
+                .to_string();
 
             PlayerGhost {
                 persona_id: user.persona_id.to_string(),
