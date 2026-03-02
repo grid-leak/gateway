@@ -12,9 +12,9 @@ use crate::{
     },
     models::{
         game_data::{
-            Bookmarks, ChallengeBookmarkEntry, Division, InitialGameDataResponse, LEVEL_ID_HASH,
-            PlayerInfo, PromotedUgcWrapper, ReachThisWrapper, UgcBookmarkEntry, UgcMeta,
-            UgcWrapper, UserRank,
+            Bookmarks, ChallengeBookmarkEntry, Division, InitialGameDataResponse, Inventory,
+            LEVEL_ID_HASH, PlayerInfo, PromotedUgcWrapper, ReachThisWrapper, UgcBookmarkEntry,
+            UgcMeta, UgcWrapper, UserRank,
         },
         ugc::CreateReachThisMeta,
         user_stats::ReachThisUserStats,
@@ -22,8 +22,8 @@ use crate::{
 };
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter,
-    QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, ModelTrait,
+    QueryFilter, QuerySelect, Set,
     sea_query::{Alias, Expr, JoinType, PostgresQueryBuilder, Query},
 };
 use std::{
@@ -47,12 +47,12 @@ pub async fn get_initial_game_data(
     let user = ctx.user(persona_id).await?;
 
     // Define queries
-    let reach_this_query = ugc::Entity::find()
-        .filter(ugc::Column::AuthorId.eq(persona_id))
+    let reach_this_query: sea_orm::Select<ugc::Entity> = user
+        .find_related(ugc::Entity)
         .filter(ugc::Column::Type.eq(UgcType::ReachThis));
 
-    let time_trial_query = ugc::Entity::find()
-        .filter(ugc::Column::AuthorId.eq(persona_id))
+    let time_trial_query: sea_orm::Select<ugc::Entity> = user
+        .find_related(ugc::Entity)
         .filter(ugc::Column::Type.eq(UgcType::TimeTrial));
 
     let random_ugc_query = ugc::Entity::find()
@@ -60,16 +60,16 @@ pub async fn get_initial_game_data(
         .filter(ugc::Column::AuthorId.ne(persona_id))
         .limit(300);
 
-    let bookmarks_query = ugc_bookmarks::Entity::find()
-        .filter(ugc_bookmarks::Column::UserId.eq(persona_id))
+    let bookmarks_query = user
+        .find_related(ugc_bookmarks::Entity)
         .find_also_related(ugc::Entity);
 
-    let challenge_bm_query = challenge_bookmarks::Entity::find()
-        .filter(challenge_bookmarks::Column::UserId.eq(persona_id));
+    let challenge_bm_query: sea_orm::Select<challenge_bookmarks::Entity> =
+        user.find_related(challenge_bookmarks::Entity);
 
     let (reach_this, time_trials, random_ugc, bookmarks_data, challenge_bookmarks, inventory) =
         if skip_ugc {
-            let (inv, c_bm) =
+            let (inv, c_bm): (Inventory, Vec<challenge_bookmarks::Model>) =
                 tokio::try_join!(super::inventory::get_inventory(ctx, persona_id), async {
                     challenge_bm_query.all(db).await.map_err(GatewayError::from)
                 })?;
@@ -87,12 +87,12 @@ pub async fn get_initial_game_data(
 
     let valid_bookmark_ugcs: Vec<&ugc::Model> = bookmarks_data
         .iter()
-        .filter_map(|(_bm, ugc_opt)| ugc_opt.as_ref())
+        .filter_map(|(_bm, ugc_opt): &(ugc_bookmarks::Model, Option<ugc::Model>)| ugc_opt.as_ref())
         .collect();
 
     // Bulk load authors & flags
     // Collect references to all UGC models we are about to process
-    let mut all_ugc_refs = Vec::new();
+    let mut all_ugc_refs: Vec<&ugc::Model> = Vec::new();
     all_ugc_refs.extend(reach_this.iter());
     all_ugc_refs.extend(time_trials.iter());
     all_ugc_refs.extend(random_ugc.iter());

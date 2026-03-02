@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, Set};
 use uuid::Uuid;
 
 use crate::{
@@ -17,10 +17,8 @@ pub async fn get_inventory(
 ) -> Result<Inventory, GatewayError> {
     let db = ctx.db();
 
-    let kit_entries = user_kits::Entity::find()
-        .filter(user_kits::Column::UserId.eq(persona_id))
-        .all(db)
-        .await?;
+    let user = ctx.user(persona_id).await?;
+    let kit_entries = user.find_related(user_kits::Entity).all(db).await?;
 
     let kits: Vec<Kit> = kit_entries
         .iter()

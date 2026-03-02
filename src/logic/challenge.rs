@@ -11,8 +11,8 @@ use crate::{
     },
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter,
-    QueryOrder, QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, ModelTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set,
     sea_query::{Alias, Expr, JoinType, OnConflict, PostgresQueryBuilder, Query},
 };
 use std::collections::HashMap;
@@ -178,9 +178,9 @@ pub async fn get_runners_route_data(
 
     let db = ctx.db();
 
-    // Fetch requested entries for the user
-    let user_entries = challenge_entries::Entity::find()
-        .filter(challenge_entries::Column::UserId.eq(persona_id))
+    let user = ctx.user(persona_id).await?;
+    let user_entries = user
+        .find_related(challenge_entries::Entity)
         .filter(challenge_entries::Column::ChallengeId.is_in(&challenge_ids))
         .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
         .all(db)
@@ -465,8 +465,9 @@ pub async fn finish_runners_route(
         run_id: run_id.to_string(),
     });
 
-    let existing = challenge_entries::Entity::find()
-        .filter(challenge_entries::Column::UserId.eq(persona_id))
+    let user = ctx.user(persona_id).await?;
+    let existing = user
+        .find_related(challenge_entries::Entity)
         .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
         .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
         .one(db)
@@ -517,7 +518,7 @@ pub async fn finish_runners_route(
 
     let division = calculate_division(total_stars);
 
-    let mut user: users::ActiveModel = ctx.user(persona_id).await?.into();
+    let mut user: users::ActiveModel = user.into();
 
     user.division_name = Set(division.name.clone());
     user.division_rank = Set(division.rank);
