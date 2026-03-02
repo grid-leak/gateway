@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use sea_orm::{ActiveModelTrait, Set};
 
-use crate::{context::GatewayContext, entities::users::ActiveModel, methods::map_err};
+use crate::{context::GatewayContext, entities::users::ActiveModel, logic::GatewayError};
 
 const VALID_STATS_KEYS: &[&str] = &[
     "pf_AmbPh3Dt01_Available",
@@ -778,7 +778,7 @@ const VALID_STATS_KEYS: &[&str] = &[
 pub async fn get_persona_stats(
     ctx: &Arc<GatewayContext>,
     persona_id: i32,
-) -> Result<serde_json::Map<String, serde_json::Value>, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<serde_json::Map<String, serde_json::Value>, GatewayError> {
     let user = ctx.user(persona_id).await?;
 
     let stats = user.stats.as_object().cloned().unwrap_or_default();
@@ -789,24 +789,30 @@ pub async fn get_persona_stats(
 fn merge_stats(
     current_stats: &mut serde_json::Value,
     updates: serde_json::Map<String, serde_json::Value>,
-) -> Result<(), String> {
+) -> Result<(), GatewayError> {
     let current_map = current_stats.as_object_mut().unwrap();
 
     for (key, value) in updates {
         if !VALID_STATS_KEYS.contains(&key.as_str()) {
-            return Err(format!("Invalid stat key: {}", key));
+            return Err(GatewayError::internal(format!("invalid stat key: {key}")));
         }
 
         if !value.is_number() {
-            return Err(format!("Value for key '{}' must be a number", key));
+            return Err(GatewayError::internal(format!(
+                "value for key '{key}' must be a number"
+            )));
         }
 
         if let Some(num) = value.as_f64() {
             if num < 0.0 {
-                return Err(format!("Value for key '{}' must be non-negative", key));
+                return Err(GatewayError::internal(format!(
+                    "value for key '{key}' must be non-negative"
+                )));
             }
         } else {
-            return Err(format!("Value for key '{}' is not a valid float", key));
+            return Err(GatewayError::internal(format!(
+                "value for key '{key}' is not a valid float"
+            )));
         }
 
         current_map.insert(key, value);
@@ -819,7 +825,7 @@ pub async fn update_persona_stats(
     ctx: &Arc<GatewayContext>,
     persona_id: i32,
     stats: serde_json::Map<String, serde_json::Value>,
-) -> Result<String, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<String, GatewayError> {
     let db = ctx.db();
 
     let user = ctx.user(persona_id).await?;
@@ -830,12 +836,12 @@ pub async fn update_persona_stats(
         current_stats = serde_json::json!({});
     }
 
-    merge_stats(&mut current_stats, stats).map_err(map_err)?;
+    merge_stats(&mut current_stats, stats)?;
 
     let mut active_model: ActiveModel = user.into();
     active_model.stats = Set(current_stats);
 
-    active_model.update(db).await.map_err(map_err)?;
+    active_model.update(db).await?;
 
     Ok("success".to_string())
 }

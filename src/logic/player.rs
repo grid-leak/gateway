@@ -1,11 +1,14 @@
-use crate::context::GatewayContext;
-use crate::entities::{challenge_entries, ugc, ugc_entries};
-use crate::entities::{users, users::Entity as Users};
-use crate::models::customization::{
-    CustomizationOutput, GhostDataInput, GhostDataOutput, PlayerGhost, TagData, TimestampOutput,
-};
-use crate::models::game_data::{
-    ChallengeEntry, Division, Entry, Location, PlayerInfo, PlayerUgcLimits, UgcEntry, UgcId,
+use crate::{
+    context::GatewayContext,
+    entities::{challenge_entries, ugc, ugc_entries},
+    entities::{users, users::Entity as Users},
+    logic::GatewayError,
+    models::customization::{
+        CustomizationOutput, GhostDataInput, GhostDataOutput, PlayerGhost, TagData, TimestampOutput,
+    },
+    models::game_data::{
+        ChallengeEntry, Division, Entry, PlayerInfo, PlayerUgcLimits, UgcEntry, UgcId,
+    },
 };
 use chrono::Utc;
 use sea_orm::prelude::Expr;
@@ -15,11 +18,11 @@ pub async fn set_player_ghost(
     ctx: &GatewayContext,
     persona_id: i32,
     data: GhostDataInput,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), GatewayError> {
     let user = Users::find_by_id(persona_id)
         .one(ctx.db())
         .await?
-        .ok_or("User not found")?;
+        .ok_or_else(|| GatewayError::internal("user not found"))?;
 
     let mut user: users::ActiveModel = user.into();
 
@@ -39,11 +42,11 @@ pub async fn set_player_tag(
     ctx: &GatewayContext,
     persona_id: i32,
     tag_data: TagData,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), GatewayError> {
     let user = Users::find_by_id(persona_id)
         .one(ctx.db())
         .await?
-        .ok_or("User not found")?;
+        .ok_or_else(|| GatewayError::internal("user not found"))?;
 
     let mut user: users::ActiveModel = user.into();
 
@@ -57,7 +60,7 @@ pub async fn set_player_tag(
 pub async fn get_player_ghosts(
     ctx: &GatewayContext,
     persona_ids: Vec<i32>,
-) -> Result<Vec<PlayerGhost>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<PlayerGhost>, GatewayError> {
     let users = Users::find()
         .filter(users::Column::PersonaId.is_in(persona_ids))
         .all(ctx.db())
@@ -87,7 +90,7 @@ pub async fn get_player_ghosts(
 pub async fn get_latest_played(
     ctx: &GatewayContext,
     persona_id: i32,
-) -> Result<Vec<Entry>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<Vec<Entry>, GatewayError> {
     // Fetch challenge entries
     let challenge_entries_list = challenge_entries::Entity::find()
         .filter(challenge_entries::Column::UserId.eq(persona_id))
@@ -180,11 +183,11 @@ pub async fn get_latest_played(
 pub async fn get_player_info(
     ctx: &GatewayContext,
     persona_id: i32,
-) -> Result<PlayerInfo, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<PlayerInfo, GatewayError> {
     let user = Users::find_by_id(persona_id)
         .one(ctx.db())
         .await?
-        .ok_or("User not found")?;
+        .ok_or_else(|| GatewayError::internal("user not found"))?;
 
     let player_info = PlayerInfo {
         name: user.name.clone(),
@@ -192,20 +195,7 @@ pub async fn get_player_info(
             name: user.division_name.clone(),
             rank: user.division_rank,
         },
-        location: vec![
-            Location {
-                r#type: "country".to_string(),
-                name: "Ukraine".to_string(),
-                cc: "UA".to_string(),
-                id: "690791".to_string(),
-            },
-            Location {
-                r#type: "locality".to_string(),
-                name: "Kyiv".to_string(),
-                cc: "UA".to_string(),
-                id: "703448".to_string(),
-            },
-        ],
+        location: vec![],
     };
 
     Ok(player_info)
@@ -214,7 +204,7 @@ pub async fn get_player_info(
 pub async fn get_player_ugc_limits(
     ctx: &GatewayContext,
     persona_id: i32,
-) -> Result<PlayerUgcLimits, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<PlayerUgcLimits, GatewayError> {
     let counts: (i64, i64) = ugc::Entity::find()
         .filter(ugc::Column::AuthorId.eq(persona_id))
         .select_only()

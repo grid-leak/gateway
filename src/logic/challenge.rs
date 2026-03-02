@@ -4,14 +4,15 @@ use crate::{
         challenge_entries::{self, ChallengeEntryType},
         users,
     },
+    logic::GatewayError,
     models::{
         game_data::{Division, HackableBillboardLeader, RunnersRouteData, UserRank},
         user_stats::{ChallengeEntryUserStats, HackableBillboardUserStats, RunnersRouteUserStats},
     },
 };
 use sea_orm::{
-    ActiveEnum, ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult,
-    QueryFilter, QueryOrder, QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter,
+    QueryOrder, QuerySelect, Set,
     sea_query::{Alias, Expr, JoinType, OnConflict, PostgresQueryBuilder, Query},
 };
 use std::collections::HashMap;
@@ -206,7 +207,7 @@ pub async fn get_runners_route_data(
     challenge_ids: Vec<String>,
     _data_types: Vec<String>,
     persona_id: i32,
-) -> Result<Vec<RunnersRouteData>, String> {
+) -> Result<Vec<RunnersRouteData>, GatewayError> {
     if challenge_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -219,8 +220,7 @@ pub async fn get_runners_route_data(
         .filter(challenge_entries::Column::ChallengeId.is_in(&challenge_ids))
         .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
         .all(db)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     let entries_map: HashMap<String, challenge_entries::Model> = user_entries
         .into_iter()
@@ -237,8 +237,7 @@ pub async fn get_runners_route_data(
         .group_by(challenge_entries::Column::ChallengeId)
         .into_model::<CountResult>()
         .all(db)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     let totals_map: HashMap<String, i64> = totals
         .into_iter()
@@ -291,8 +290,7 @@ pub async fn get_runners_route_data(
             values,
         ))
         .all(db)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
         rank_results
             .into_iter()
@@ -310,7 +308,11 @@ pub async fn get_runners_route_data(
 
         if let Some(entry) = entries_map.get(&challenge_id) {
             let stats: RunnersRouteUserStats = serde_json::from_value(entry.user_stats.clone())
-                .map_err(|e| format!("Failed to parse user stats for {}: {}", challenge_id, e))?;
+                .map_err(|e| {
+                    GatewayError::internal(format!(
+                        "failed to parse user stats for {challenge_id}: {e}"
+                    ))
+                })?;
 
             let better_count = *ranks_map.get(&challenge_id).unwrap_or(&0);
             let total_entries = *totals_map.get(&challenge_id).unwrap_or(&0);
@@ -341,7 +343,7 @@ pub async fn get_runners_route_data(
 pub async fn get_hackable_billboard_friends_leaders(
     ctx: &Arc<GatewayContext>,
     challenge_ids: Vec<String>,
-) -> Result<HashMap<String, Option<HackableBillboardLeader>>, String> {
+) -> Result<HashMap<String, Option<HackableBillboardLeader>>, GatewayError> {
     if challenge_ids.is_empty() {
         return Ok(HashMap::new());
     }
@@ -356,8 +358,7 @@ pub async fn get_hackable_billboard_friends_leaders(
             .order_by_desc(challenge_entries::Column::CompletedAt)
             .find_also_related(crate::entities::users::Entity)
             .one(db)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         if let Some((entry, Some(user))) = entry_opt {
             response_map.insert(
@@ -383,7 +384,7 @@ pub async fn finish_hackable_billboard(
     challenge_id: String,
     main_stat: i32,
     _extra_stats: serde_json::Value,
-) -> Result<String, String> {
+) -> Result<String, GatewayError> {
     let db = ctx.db();
     let now = chrono::Utc::now();
 
@@ -412,8 +413,7 @@ pub async fn finish_hackable_billboard(
         .to_owned(),
     )
     .exec(db)
-    .await
-    .map_err(|e| e.to_string())?;
+    .await?;
 
     Ok("success".to_string())
 }
@@ -473,15 +473,14 @@ pub async fn finish_runners_route(
     main_stat: i32,
     extra_stats: serde_json::Value,
     run_id: i32,
-) -> Result<Division, String> {
+) -> Result<Division, GatewayError> {
     if !RUNNERS_ROUTE_THRESHOLDS
         .iter()
         .any(|t| t.id == challenge_id)
     {
-        return Err(format!(
-            "Invalid RunnersRoute challenge ID: {}",
-            challenge_id
-        ));
+        return Err(GatewayError::internal(format!(
+            "invalid RunnersRoute challenge ID: {challenge_id}"
+        )));
     }
 
     let db = ctx.db();
@@ -508,8 +507,7 @@ pub async fn finish_runners_route(
         .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
         .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
         .one(db)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     let should_upsert = match &existing {
         // Only update if new score is better
@@ -540,16 +538,14 @@ pub async fn finish_runners_route(
             .to_owned(),
         )
         .exec(db)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
     }
 
     let all_entries = challenge_entries::Entity::find()
         .filter(challenge_entries::Column::UserId.eq(persona_id))
         .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::RunnersRoute))
         .all(db)
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     let total_stars: u32 = all_entries
         .iter()
@@ -558,15 +554,11 @@ pub async fn finish_runners_route(
 
     let division = calculate_division(total_stars);
 
-    let mut user: users::ActiveModel = ctx
-        .user(persona_id)
-        .await
-        .map_err(|e| e.message().to_string())?
-        .into();
+    let mut user: users::ActiveModel = ctx.user(persona_id).await?.into();
 
     user.division_name = Set(division.name.clone());
     user.division_rank = Set(division.rank);
-    user.update(db).await.map_err(|e| e.to_string())?;
+    user.update(db).await?;
 
     Ok(division)
 }

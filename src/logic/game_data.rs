@@ -3,7 +3,7 @@ use crate::{
         ugc::{self, UgcType},
         user_ugc_flags, users,
     },
-    methods::map_err,
+    logic::GatewayError,
     models::game_data::{LEVEL_ID_HASH, Transform, UgcId, UgcMeta},
 };
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
@@ -114,7 +114,7 @@ impl BatchUgcLoader {
         db: &C,
         viewer_id: i32,
         ugc_entries: &[&ugc::Model],
-    ) -> Result<Self, jsonrpsee::types::ErrorObjectOwned>
+    ) -> Result<Self, GatewayError>
     where
         C: ConnectionTrait,
     {
@@ -139,13 +139,13 @@ impl BatchUgcLoader {
         );
 
         let authors_map = authors_res
-            .map_err(map_err)?
+            .map_err(GatewayError::from)?
             .into_iter()
             .map(|u| (u.persona_id, u.name))
             .collect();
 
         let flags_map = flags_res
-            .map_err(map_err)?
+            .map_err(GatewayError::from)?
             .into_iter()
             .map(|f| (f.ugc_id, UgcFlags::from(Some(f))))
             .collect();

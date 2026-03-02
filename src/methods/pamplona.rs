@@ -7,8 +7,7 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use crate::{
     context::GatewayContext,
     entities::users,
-    logic::{self, challenge::get_runners_route_data},
-    methods::map_err,
+    logic::{self, GatewayError, challenge::get_runners_route_data},
     models::{
         customization::{PlayerGhost, PlayerTagResponse, TagData},
         game_data::{Entry, PlayerInfo, ReachThisWrapper, RunnersRouteData, UgcId},
@@ -76,7 +75,7 @@ impl PamplonaServer for PamplonaImpl {
             .filter(users::Column::PersonaId.is_in(persona_ids))
             .all(self.ctx.db())
             .await
-            .map_err(map_err)?;
+            .map_err(|e| GatewayError::from(e).into_rpc_err())?;
 
         let response = users
             .into_iter()
@@ -94,14 +93,14 @@ impl PamplonaServer for PamplonaImpl {
     }
 
     async fn get_player_tag(&self, persona_id: i32) -> RpcResult<TagData> {
-        let user = self.ctx.user(persona_id).await?;
+        let user = self
+            .ctx
+            .user(persona_id)
+            .await
+            .map_err(GatewayError::into_rpc_err)?;
 
         let tag_data: TagData = serde_json::from_value(user.tag_data).map_err(|e| {
-            jsonrpsee::types::ErrorObject::owned(
-                jsonrpsee::types::error::INTERNAL_ERROR_CODE,
-                format!("Failed to parse tag data: {}", e),
-                None::<()>,
-            )
+            GatewayError::internal(format!("failed to parse tag data: {e}")).into_rpc_err()
         })?;
 
         Ok(tag_data)
@@ -115,32 +114,34 @@ impl PamplonaServer for PamplonaImpl {
     ) -> RpcResult<Vec<RunnersRouteData>> {
         get_runners_route_data(&self.ctx, challenge_ids, data_types, persona_id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_player_ghosts(&self, persona_ids: Vec<i32>) -> RpcResult<Vec<PlayerGhost>> {
         logic::player::get_player_ghosts(&self.ctx, persona_ids)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_persona_stats(
         &self,
         persona_id: i32,
     ) -> RpcResult<serde_json::Map<String, serde_json::Value>> {
-        logic::stats::get_persona_stats(&self.ctx, persona_id).await
+        logic::stats::get_persona_stats(&self.ctx, persona_id)
+            .await
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_latest_played(&self, persona_id: i32) -> RpcResult<Vec<Entry>> {
         logic::player::get_latest_played(&self.ctx, persona_id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_player_info(&self, persona_id: i32) -> RpcResult<PlayerInfo> {
         logic::player::get_player_info(&self.ctx, persona_id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_reach_this_data(
@@ -153,6 +154,6 @@ impl PamplonaServer for PamplonaImpl {
 
         logic::ugc::get_reach_this_data(&self.ctx, ugc_ids, data_types, persona_id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 }

@@ -1,8 +1,7 @@
 use crate::{
     context::GatewayContext,
     entities::challenge_entries::ChallengeEntryType,
-    logic,
-    methods::map_err,
+    logic::{self, GatewayError},
     models::{
         customization::GhostDataInput,
         game_data::{
@@ -162,14 +161,16 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         level_ids: Vec<u32>,
     ) -> RpcResult<InitialGameDataResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
-        logic::ugc::get_initial_game_data(&self.ctx, level_ids[0], persona_id).await
+        logic::ugc::get_initial_game_data(&self.ctx, level_ids[0], persona_id)
+            .await
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_inventory(&self, extensions: &Extensions) -> RpcResult<Inventory> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::inventory::get_inventory(&self.ctx, persona_id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_runners_route_data(
@@ -181,7 +182,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::challenge::get_runners_route_data(&self.ctx, challenge_ids, data_types, persona_id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_hackable_billboard_friends_leaders(
@@ -191,7 +192,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     ) -> RpcResult<HashMap<String, Option<HackableBillboardLeader>>> {
         logic::challenge::get_hackable_billboard_friends_leaders(&self.ctx, challenge_ids)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn set_player_ghost(
@@ -202,7 +203,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::player::set_player_ghost(&self.ctx, persona_id, ghost_data)
             .await
-            .map_err(map_err)?;
+            .map_err(GatewayError::into_rpc_err)?;
 
         Ok("success".to_string())
     }
@@ -215,7 +216,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::player::set_player_tag(&self.ctx, persona_id, tag_data)
             .await
-            .map_err(map_err)?;
+            .map_err(GatewayError::into_rpc_err)?;
 
         Ok("success".to_string())
     }
@@ -224,21 +225,21 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::inventory::grant_kit(&self.ctx, persona_id, &id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn open_kit(&self, extensions: &Extensions, id: String) -> RpcResult<Vec<Item>> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::inventory::open_kit(&self.ctx, persona_id, &id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn revoke_kit(&self, extensions: &Extensions, id: String) -> RpcResult<Vec<Item>> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::inventory::revoke_kit(&self.ctx, persona_id, &id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn update_persona_stats(
@@ -247,7 +248,9 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         stats: UserStats,
     ) -> RpcResult<String> {
         let persona_id = *extensions.get::<i32>().unwrap();
-        logic::stats::update_persona_stats(&self.ctx, persona_id, stats).await
+        logic::stats::update_persona_stats(&self.ctx, persona_id, stats)
+            .await
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn finish_hackable_billboard(
@@ -266,28 +269,30 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             extra_stats,
         )
         .await
-        .map_err(map_err)?;
+        .map_err(GatewayError::into_rpc_err)?;
 
         Ok("success".to_string())
     }
 
     async fn get_persona_stats(&self, extensions: &Extensions) -> RpcResult<UserStats> {
         let persona_id = *extensions.get::<i32>().unwrap();
-        logic::stats::get_persona_stats(&self.ctx, persona_id).await
+        logic::stats::get_persona_stats(&self.ctx, persona_id)
+            .await
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_latest_played(&self, extensions: &Extensions) -> RpcResult<Vec<Entry>> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::player::get_latest_played(&self.ctx, persona_id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_player_ugc_limits(&self, extensions: &Extensions) -> RpcResult<PlayerUgcLimits> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::player::get_player_ugc_limits(&self.ctx, persona_id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn create_reach_this(
@@ -300,7 +305,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
 
         logic::ugc::create_reach_this(&self.ctx, persona_id, meta)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn finish_reach_this(
@@ -311,7 +316,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::ugc::finish_reach_this(&self.ctx, persona_id, ugc_id.id)
             .await
-            .map_err(map_err)
+            .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_overview_reach_this_leaderboard(
@@ -326,7 +331,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             &self.ctx, persona_id, ugc_id.id, radius,
         )
         .await
-        .map_err(map_err)
+        .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_hackable_billboard_friends_leaderboard(
@@ -349,7 +354,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             true,
         )
         .await
-        .map_err(map_err)
+        .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_overview_runners_route_leaderboard(
@@ -369,7 +374,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             radius,
         )
         .await
-        .map_err(map_err)
+        .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_runners_route_friends_leaderboard(
@@ -392,7 +397,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             true,
         )
         .await
-        .map_err(map_err)
+        .map_err(GatewayError::into_rpc_err)
     }
     async fn get_runners_route_leaderboard(
         &self,
@@ -414,7 +419,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             false,
         )
         .await
-        .map_err(map_err)
+        .map_err(GatewayError::into_rpc_err)
     }
 
     async fn finish_runners_route(
@@ -435,6 +440,6 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             run_id,
         )
         .await
-        .map_err(map_err)
+        .map_err(GatewayError::into_rpc_err)
     }
 }

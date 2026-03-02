@@ -5,7 +5,7 @@ use crate::{
         ugc_entries::{self, UgcEntryType},
         users,
     },
-    methods::map_err,
+    logic::GatewayError,
     models::game_data::{
         Division, LeaderboardResponse, LeaderboardUser, LeaderboardWrapper,
         OverviewLeaderboardResponse,
@@ -42,11 +42,12 @@ pub async fn get_overview_reach_this_leaderboard(
     persona_id: i32,
     ugc_uuid: String,
     radius: Option<i32>,
-) -> Result<OverviewLeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<OverviewLeaderboardResponse, GatewayError> {
     let user = ctx.user(persona_id).await?;
 
     let db = ctx.db();
-    let ugc_uuid = Uuid::from_str(&ugc_uuid).map_err(map_err)?;
+    let ugc_uuid = Uuid::from_str(&ugc_uuid)
+        .map_err(|e| GatewayError::invalid_params(format!("invalid UGC UUID: {e}")))?;
     let radius = std::cmp::max(radius.unwrap_or(3), 0);
 
     let all_entries = ugc_entries::Entity::find()
@@ -54,8 +55,7 @@ pub async fn get_overview_reach_this_leaderboard(
         .filter(ugc_entries::Column::EntryType.eq(UgcEntryType::ReachThis))
         .order_by_asc(ugc_entries::Column::CompletedAt)
         .all(db)
-        .await
-        .map_err(map_err)?;
+        .await?;
 
     let total_count = all_entries.len() as i64;
 
@@ -115,7 +115,7 @@ pub async fn get_overview_challenge_leaderboard(
     entry_type: ChallengeEntryType,
     score_order: Order,
     radius: i32,
-) -> Result<OverviewLeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<OverviewLeaderboardResponse, GatewayError> {
     let db = ctx.db();
     let radius = std::cmp::max(radius, 0);
 
@@ -125,8 +125,7 @@ pub async fn get_overview_challenge_leaderboard(
         .order_by(challenge_entries::Column::Score, score_order)
         .find_also_related(users::Entity)
         .all(db)
-        .await
-        .map_err(map_err)?;
+        .await?;
 
     let total_count = all_entries.len() as i64;
 
@@ -187,7 +186,7 @@ pub async fn get_challenge_leaderboard(
     offset: i64,
     count: i64,
     friends_only: bool,
-) -> Result<LeaderboardResponse, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<LeaderboardResponse, GatewayError> {
     let db = ctx.db();
 
     // 1. Global Count
@@ -195,8 +194,7 @@ pub async fn get_challenge_leaderboard(
         .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
         .filter(challenge_entries::Column::EntryType.eq(entry_type.clone()))
         .count(db)
-        .await
-        .map_err(map_err)? as i64;
+        .await? as i64;
 
     // 2. Global Leader
     let global_leader_entry = challenge_entries::Entity::find()
@@ -205,8 +203,7 @@ pub async fn get_challenge_leaderboard(
         .order_by(challenge_entries::Column::Score, score_order.clone())
         .find_also_related(users::Entity)
         .one(db)
-        .await
-        .map_err(map_err)?;
+        .await?;
 
     let global_leader = if let Some((entry, Some(user))) = global_leader_entry {
         Some(user_to_leaderboard_entry(
@@ -231,8 +228,7 @@ pub async fn get_challenge_leaderboard(
             .filter(challenge_entries::Column::UserId.eq(persona_id))
             .find_also_related(users::Entity)
             .one(db)
-            .await
-            .map_err(map_err)?;
+            .await?;
 
         if let Some((entry, Some(user))) = user_entry {
             // Count how many have a better score than the user to determine rank
@@ -244,8 +240,7 @@ pub async fn get_challenge_leaderboard(
                         .filter(challenge_entries::Column::EntryType.eq(entry_type))
                         .filter(challenge_entries::Column::Score.lt(entry.score))
                         .count(db)
-                        .await
-                        .map_err(map_err)? as i32
+                        .await? as i32
                 }
                 Order::Desc => {
                     // Higher is better → count entries with score > user's score
@@ -254,8 +249,7 @@ pub async fn get_challenge_leaderboard(
                         .filter(challenge_entries::Column::EntryType.eq(entry_type))
                         .filter(challenge_entries::Column::Score.gt(entry.score))
                         .count(db)
-                        .await
-                        .map_err(map_err)? as i32
+                        .await? as i32
                 }
                 _ => 0,
             };
@@ -296,8 +290,7 @@ pub async fn get_challenge_leaderboard(
             .limit(count as u64)
             .find_also_related(users::Entity)
             .all(db)
-            .await
-            .map_err(map_err)?;
+            .await?;
 
         // total_count for this logic often implies the *returned* count or the *total available*?
         // LeaderboardWrapper usually wants the total count of the list being returned or the scope.

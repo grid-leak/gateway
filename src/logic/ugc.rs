@@ -6,8 +6,10 @@ use crate::{
         ugc_bookmarks,
         ugc_entries::{self, UgcEntryType},
     },
-    logic::game_data::{BatchUgcLoader, UgcFlags},
-    methods::map_err,
+    logic::{
+        GameErrorCode, GatewayError,
+        game_data::{BatchUgcLoader, UgcFlags},
+    },
     models::{
         game_data::{
             Bookmarks, ChallengeBookmarkEntry, Division, InitialGameDataResponse, LEVEL_ID_HASH,
@@ -35,7 +37,7 @@ pub async fn get_initial_game_data(
     ctx: &Arc<GatewayContext>,
     level_id: u32,
     persona_id: i32,
-) -> Result<InitialGameDataResponse, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<InitialGameDataResponse, GatewayError> {
     let db = ctx.db();
     // The game client might request an invalid Level ID for some reason...
     // Mimicking the original server's behavior by returning just the player info
@@ -69,16 +71,16 @@ pub async fn get_initial_game_data(
         if skip_ugc {
             let (inv, c_bm) =
                 tokio::try_join!(super::inventory::get_inventory(ctx, persona_id), async {
-                    challenge_bm_query.all(db).await.map_err(map_err)
+                    challenge_bm_query.all(db).await.map_err(GatewayError::from)
                 })?;
             (vec![], vec![], vec![], vec![], c_bm, inv)
         } else {
             tokio::try_join!(
-                async { reach_this_query.all(db).await.map_err(map_err) },
-                async { time_trial_query.all(db).await.map_err(map_err) },
-                async { random_ugc_query.all(db).await.map_err(map_err) },
-                async { bookmarks_query.all(db).await.map_err(map_err) },
-                async { challenge_bm_query.all(db).await.map_err(map_err) },
+                async { reach_this_query.all(db).await.map_err(GatewayError::from) },
+                async { time_trial_query.all(db).await.map_err(GatewayError::from) },
+                async { random_ugc_query.all(db).await.map_err(GatewayError::from) },
+                async { bookmarks_query.all(db).await.map_err(GatewayError::from) },
+                async { challenge_bm_query.all(db).await.map_err(GatewayError::from) },
                 super::inventory::get_inventory(ctx, persona_id),
             )?
         };
@@ -188,26 +190,21 @@ pub async fn create_reach_this(
     ctx: &GatewayContext,
     author_id: i32,
     reach_this: CreateReachThisMeta,
-) -> Result<UgcMeta, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<UgcMeta, GatewayError> {
     let db = ctx.db();
 
-    let limits = super::player::get_player_ugc_limits(ctx, author_id)
-        .await
-        .map_err(map_err)?;
+    let limits = super::player::get_player_ugc_limits(ctx, author_id).await?;
 
-    // TODO: return proper error codes for the game to handle them
     if limits.ugc_count >= limits.max_ugc {
-        return Err(jsonrpsee::types::ErrorObjectOwned::owned(
-            -32602,
+        return Err(GatewayError::game(
+            GameErrorCode::TooManyUgc,
             "UGC creation limit reached",
-            None::<()>,
         ));
     }
     if reach_this.published && limits.published_count >= limits.max_published {
-        return Err(jsonrpsee::types::ErrorObjectOwned::owned(
-            -32602,
+        return Err(GatewayError::game(
+            GameErrorCode::TooManyPublishedUgc,
             "UGC publish limit reached",
-            None::<()>,
         ));
     }
 
@@ -234,7 +231,7 @@ pub async fn create_reach_this(
         qw: Set(transform.qw.unwrap_or(1.0)),
     };
 
-    let ugc_model: ugc::Model = new_ugc.insert(db).await.map_err(map_err)?;
+    let ugc_model: ugc::Model = new_ugc.insert(db).await?;
 
     Ok(ugc_model.into_meta(&user.name, &UgcFlags::default()))
 }
@@ -243,10 +240,11 @@ pub async fn finish_reach_this(
     ctx: &GatewayContext,
     persona_id: i32,
     ugc_id: String,
-) -> Result<ReachThisWrapper, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<ReachThisWrapper, GatewayError> {
     let db = ctx.db();
     let now = chrono::Utc::now();
-    let ugc_uuid = Uuid::from_str(&ugc_id).map_err(|_| map_err("Invalid UGC UUID"))?;
+    let ugc_uuid =
+        Uuid::from_str(&ugc_id).map_err(|_| GatewayError::invalid_params("invalid UGC UUID"))?;
 
     ugc_entries::Entity::insert(ugc_entries::ActiveModel {
         user_id: Set(persona_id),
@@ -266,16 +264,14 @@ pub async fn finish_reach_this(
         .to_owned(),
     )
     .exec(db)
-    .await
-    .map_err(map_err)?;
+    .await?;
 
     // UGC Meta needs to be returned in the response or
     // the game will erase the Beat LE from the map
     let ugc_model = ugc::Entity::find_by_id(ugc_uuid)
         .one(db)
-        .await
-        .map_err(map_err)?
-        .ok_or_else(|| map_err("UGC not found"))?;
+        .await?
+        .ok_or_else(|| GatewayError::internal("UGC not found"))?;
 
     let batch_loader = BatchUgcLoader::load(db, persona_id, &[&ugc_model]).await?;
     let author_name = batch_loader.get_author(ugc_model.author_id);
@@ -306,7 +302,7 @@ pub async fn get_reach_this_data(
     ugc_ids: Vec<String>,
     data_types: Vec<String>,
     persona_id: i32,
-) -> Result<Vec<ReachThisWrapper>, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<Vec<ReachThisWrapper>, GatewayError> {
     if ugc_ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -330,8 +326,7 @@ pub async fn get_reach_this_data(
             .filter(ugc_entries::Column::UgcId.is_in(requested_ids.clone()))
             .filter(ugc_entries::Column::EntryType.eq(UgcEntryType::ReachThis))
             .all(db)
-            .await
-            .map_err(map_err)?;
+            .await?;
 
         for entry in user_entries {
             user_stats_map.insert(entry.ugc_id, entry);
@@ -347,8 +342,7 @@ pub async fn get_reach_this_data(
             .group_by(ugc_entries::Column::UgcId)
             .into_model::<UgcCountResult>()
             .all(db)
-            .await
-            .map_err(map_err)?;
+            .await?;
 
         for t in totals {
             if let Some(uid) = t.ugc_id {
@@ -400,8 +394,7 @@ pub async fn get_reach_this_data(
                 sea_orm::Statement::from_sql_and_values(DbBackend::Postgres, &sql, values),
             )
             .all(db)
-            .await
-            .map_err(map_err)?;
+            .await?;
 
             for r in rank_results {
                 if let Some(uid) = r.ugc_id {
@@ -417,8 +410,7 @@ pub async fn get_reach_this_data(
         let ugc_entries = ugc::Entity::find()
             .filter(ugc::Column::Id.is_in(requested_ids.clone()))
             .all(db)
-            .await
-            .map_err(map_err)?;
+            .await?;
 
         let batch_loader =
             BatchUgcLoader::load(db, persona_id, &ugc_entries.iter().collect::<Vec<_>>()).await?;

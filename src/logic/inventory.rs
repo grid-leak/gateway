@@ -7,22 +7,20 @@ use uuid::Uuid;
 use crate::{
     context::GatewayContext,
     entities::user_kits,
-    logic::kit_data,
-    methods::map_err,
+    logic::{GatewayError, kit_data},
     models::game_data::{Inventory, Item, Kit},
 };
 
 pub async fn get_inventory(
     ctx: &Arc<GatewayContext>,
     persona_id: i32,
-) -> Result<Inventory, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<Inventory, GatewayError> {
     let db = ctx.db();
 
     let kit_entries = user_kits::Entity::find()
         .filter(user_kits::Column::UserId.eq(persona_id))
         .all(db)
-        .await
-        .map_err(map_err)?;
+        .await?;
 
     let kits: Vec<Kit> = kit_entries
         .iter()
@@ -61,28 +59,17 @@ pub async fn grant_kit(
     ctx: &Arc<GatewayContext>,
     persona_id: i32,
     kit_id: &str,
-) -> Result<Kit, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<Kit, GatewayError> {
     let db = ctx.db();
 
-    let kit_uuid = Uuid::parse_str(kit_id).map_err(|e| {
-        jsonrpsee::types::ErrorObjectOwned::owned(
-            -32602,
-            format!("Invalid kit ID: {}", e),
-            None::<()>,
-        )
-    })?;
+    let kit_uuid = Uuid::parse_str(kit_id)
+        .map_err(|e| GatewayError::invalid_params(format!("invalid kit ID: {e}")))?;
 
-    let kit_type_str = kit_data::get_kit_type(kit_id).ok_or_else(|| {
-        jsonrpsee::types::ErrorObjectOwned::owned(-32602, "Unknown kit ID", None::<()>)
-    })?;
+    let kit_type_str = kit_data::get_kit_type(kit_id)
+        .ok_or_else(|| GatewayError::invalid_params("unknown kit ID"))?;
 
-    let kit_type_uuid = Uuid::parse_str(kit_type_str).map_err(|e| {
-        jsonrpsee::types::ErrorObjectOwned::owned(
-            -32603,
-            format!("Invalid kit type UUID: {}", e),
-            None::<()>,
-        )
-    })?;
+    let kit_type_uuid = Uuid::parse_str(kit_type_str)
+        .map_err(|e| GatewayError::internal(format!("invalid kit type UUID: {e}")))?;
 
     let new_kit = user_kits::ActiveModel {
         user_id: Set(persona_id),
@@ -92,7 +79,7 @@ pub async fn grant_kit(
         ..Default::default()
     };
 
-    new_kit.insert(db).await.map_err(map_err)?;
+    new_kit.insert(db).await?;
 
     Ok(Kit {
         id: kit_uuid.to_string().to_uppercase(),
@@ -105,42 +92,29 @@ pub async fn open_kit(
     ctx: &Arc<GatewayContext>,
     persona_id: i32,
     kit_id: &str,
-) -> Result<Vec<Item>, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<Vec<Item>, GatewayError> {
     let db = ctx.db();
 
-    let kit_uuid = Uuid::parse_str(kit_id).map_err(|e| {
-        jsonrpsee::types::ErrorObjectOwned::owned(
-            -32602,
-            format!("Invalid kit ID: {}", e),
-            None::<()>,
-        )
-    })?;
+    let kit_uuid = Uuid::parse_str(kit_id)
+        .map_err(|e| GatewayError::invalid_params(format!("invalid kit ID: {e}")))?;
 
     let kit_entry = user_kits::Entity::find()
         .filter(user_kits::Column::UserId.eq(persona_id))
         .filter(user_kits::Column::KitId.eq(kit_uuid))
         .one(db)
-        .await
-        .map_err(map_err)?
-        .ok_or_else(|| {
-            jsonrpsee::types::ErrorObjectOwned::owned(-32602, "Kit not found", None::<()>)
-        })?;
+        .await?
+        .ok_or_else(|| GatewayError::invalid_params("kit not found"))?;
 
     if kit_entry.opened {
-        return Err(jsonrpsee::types::ErrorObjectOwned::owned(
-            -32602,
-            "Kit already opened",
-            None::<()>,
-        ));
+        return Err(GatewayError::invalid_params("kit already opened"));
     }
 
     let mut active_kit: user_kits::ActiveModel = kit_entry.into();
     active_kit.opened = Set(true);
-    active_kit.update(db).await.map_err(map_err)?;
+    active_kit.update(db).await?;
 
-    let rewards = kit_data::get_kit_rewards(kit_id).ok_or_else(|| {
-        jsonrpsee::types::ErrorObjectOwned::owned(-32603, "Kit rewards not found", None::<()>)
-    })?;
+    let rewards = kit_data::get_kit_rewards(kit_id)
+        .ok_or_else(|| GatewayError::internal("kit rewards not found"))?;
 
     let items: Vec<Item> = rewards
         .iter()
@@ -157,39 +131,28 @@ pub async fn revoke_kit(
     ctx: &Arc<GatewayContext>,
     persona_id: i32,
     kit_id: &str,
-) -> Result<Vec<Item>, jsonrpsee::types::ErrorObjectOwned> {
+) -> Result<Vec<Item>, GatewayError> {
     let db = ctx.db();
 
-    let kit_uuid = Uuid::parse_str(kit_id).map_err(|e| {
-        jsonrpsee::types::ErrorObjectOwned::owned(
-            -32602,
-            format!("Invalid kit ID: {}", e),
-            None::<()>,
-        )
-    })?;
+    let kit_uuid = Uuid::parse_str(kit_id)
+        .map_err(|e| GatewayError::invalid_params(format!("invalid kit ID: {e}")))?;
 
     let result = user_kits::Entity::delete_many()
         .filter(user_kits::Column::UserId.eq(persona_id))
         .filter(user_kits::Column::KitId.eq(kit_uuid))
         .exec(db)
-        .await
-        .map_err(map_err)?;
+        .await?;
 
     if result.rows_affected == 0 {
-        return Err(jsonrpsee::types::ErrorObjectOwned::owned(
-            -32602,
-            "Kit not found",
-            None::<()>,
-        ));
+        return Err(GatewayError::invalid_params("kit not found"));
     }
 
     // Game expects the same response body as the openKit
     // But I haven't actually recorded a `revokeKit`, so
     // I will have to assume it wants to return count 0
 
-    let rewards = kit_data::get_kit_rewards(kit_id).ok_or_else(|| {
-        jsonrpsee::types::ErrorObjectOwned::owned(-32603, "Kit rewards not found", None::<()>)
-    })?;
+    let rewards = kit_data::get_kit_rewards(kit_id)
+        .ok_or_else(|| GatewayError::internal("kit rewards not found"))?;
 
     let items: Vec<Item> = rewards
         .iter()
