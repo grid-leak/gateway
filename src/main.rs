@@ -34,6 +34,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Load environment variables
     dotenv().ok();
 
+    let port: u16 = std::env::var("PORT")
+        .expect("PORT must be set")
+        .parse()
+        .expect("PORT must be a valid u16");
+
     // Initialize secret for application/x-encrypted payload decryption
     init_secret()?;
 
@@ -50,7 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .sync(&db)
         .await?;
 
-    let addr = "127.0.0.1:3000".parse::<SocketAddr>().unwrap();
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
     // High level tracing/logging for all requests
     let trace_layer =TraceLayer::new_for_http()
