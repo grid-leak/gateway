@@ -12,7 +12,9 @@ use crate::{
 };
 use chrono::Utc;
 use sea_orm::prelude::Expr;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QuerySelect, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set,
+};
 
 pub async fn set_player_ghost(
     ctx: &GatewayContext,
@@ -102,6 +104,7 @@ pub async fn get_latest_played(
     // Fetch challenge entries
     let challenge_entries_list = challenge_entries::Entity::find()
         .filter(challenge_entries::Column::UserId.eq(persona_id))
+        .order_by_desc(challenge_entries::Column::CompletedAt)
         .limit(20)
         .all(ctx.db())
         .await?;
@@ -109,16 +112,39 @@ pub async fn get_latest_played(
     // Fetch UGC entries
     let ugc_entries_list = ugc_entries::Entity::find()
         .filter(ugc_entries::Column::UserId.eq(persona_id))
+        .order_by_desc(ugc_entries::Column::CompletedAt)
         .limit(20)
         .all(ctx.db())
         .await?;
 
+    enum Fetched {
+        Challenge(crate::entities::challenge_entries::Model),
+        Ugc(crate::entities::ugc_entries::Model),
+    }
+
+    let mut combined: Vec<(chrono::DateTime<chrono::Utc>, Fetched)> = Vec::new();
+    for entry in challenge_entries_list {
+        combined.push((entry.completed_at, Fetched::Challenge(entry)));
+    }
+    for entry in ugc_entries_list {
+        combined.push((entry.completed_at, Fetched::Ugc(entry)));
+    }
+
+    combined.sort_by(|a, b| b.0.cmp(&a.0));
+    combined.truncate(20);
+
+    let mut ugc_ids_to_fetch = Vec::new();
+    for (_, fetched) in &combined {
+        if let Fetched::Ugc(entry) = fetched {
+            ugc_ids_to_fetch.push(entry.ugc_id);
+        }
+    }
+
     // Fetch UGC metadata for author IDs
-    let ugc_ids: Vec<uuid::Uuid> = ugc_entries_list.iter().map(|e| e.ugc_id).collect();
     let ugc_models: std::collections::HashMap<uuid::Uuid, crate::entities::ugc::Model> =
-        if !ugc_ids.is_empty() {
+        if !ugc_ids_to_fetch.is_empty() {
             ugc::Entity::find()
-                .filter(ugc::Column::Id.is_in(ugc_ids))
+                .filter(ugc::Column::Id.is_in(ugc_ids_to_fetch))
                 .all(ctx.db())
                 .await?
                 .into_iter()
@@ -130,56 +156,59 @@ pub async fn get_latest_played(
 
     let mut results = Vec::new();
 
-    for entry in challenge_entries_list {
-        let user_stats = entry.user_stats;
-        match entry.entry_type {
-            challenge_entries::ChallengeEntryType::HackableBillboard => {
-                if let Ok(stats) = serde_json::from_value(user_stats) {
-                    results.push(Entry::Challenge(ChallengeEntry::HackableBillboard {
-                        challenge_id: entry.challenge_id,
-                        stats,
-                    }));
+    for (_, fetched) in combined {
+        match fetched {
+            Fetched::Challenge(entry) => {
+                let user_stats = entry.user_stats;
+                match entry.entry_type {
+                    challenge_entries::ChallengeEntryType::HackableBillboard => {
+                        if let Ok(stats) = serde_json::from_value(user_stats) {
+                            results.push(Entry::Challenge(ChallengeEntry::HackableBillboard {
+                                challenge_id: entry.challenge_id,
+                                stats,
+                            }));
+                        }
+                    }
+                    challenge_entries::ChallengeEntryType::RunnersRoute => {
+                        if let Ok(stats) = serde_json::from_value(user_stats) {
+                            results.push(Entry::Challenge(ChallengeEntry::RunnersRoute {
+                                challenge_id: entry.challenge_id,
+                                stats,
+                            }));
+                        }
+                    }
                 }
             }
-            challenge_entries::ChallengeEntryType::RunnersRoute => {
-                if let Ok(stats) = serde_json::from_value(user_stats) {
-                    results.push(Entry::Challenge(ChallengeEntry::RunnersRoute {
-                        challenge_id: entry.challenge_id,
-                        stats,
-                    }));
-                }
-            }
-        }
-    }
+            Fetched::Ugc(entry) => {
+                let user_stats = entry.user_stats;
+                let author_id = ugc_models
+                    .get(&entry.ugc_id)
+                    .map(|u| u.author_id)
+                    .unwrap_or(0);
 
-    for entry in ugc_entries_list {
-        let user_stats = entry.user_stats;
-        let author_id = ugc_models
-            .get(&entry.ugc_id)
-            .map(|u| u.author_id)
-            .unwrap_or(0);
-
-        match entry.entry_type {
-            ugc_entries::UgcEntryType::ReachThis => {
-                if let Ok(stats) = serde_json::from_value(user_stats) {
-                    results.push(Entry::Ugc(UgcEntry::ReachThis {
-                        ugc_id: UgcId {
-                            user_id: author_id,
-                            id: entry.ugc_id.to_string(),
-                        },
-                        stats,
-                    }));
-                }
-            }
-            ugc_entries::UgcEntryType::TimeTrial => {
-                if let Ok(stats) = serde_json::from_value(user_stats) {
-                    results.push(Entry::Ugc(UgcEntry::TimeTrial {
-                        ugc_id: UgcId {
-                            user_id: author_id,
-                            id: entry.ugc_id.to_string(),
-                        },
-                        stats,
-                    }));
+                match entry.entry_type {
+                    ugc_entries::UgcEntryType::ReachThis => {
+                        if let Ok(stats) = serde_json::from_value(user_stats) {
+                            results.push(Entry::Ugc(UgcEntry::ReachThis {
+                                ugc_id: UgcId {
+                                    user_id: author_id,
+                                    id: entry.ugc_id.to_string(),
+                                },
+                                stats,
+                            }));
+                        }
+                    }
+                    ugc_entries::UgcEntryType::TimeTrial => {
+                        if let Ok(stats) = serde_json::from_value(user_stats) {
+                            results.push(Entry::Ugc(UgcEntry::TimeTrial {
+                                ugc_id: UgcId {
+                                    user_id: author_id,
+                                    id: entry.ugc_id.to_string(),
+                                },
+                                stats,
+                            }));
+                        }
+                    }
                 }
             }
         }
