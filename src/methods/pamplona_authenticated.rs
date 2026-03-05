@@ -5,9 +5,9 @@ use crate::{
     models::{
         customization::GhostDataInput,
         game_data::{
-            Division, Entry, HackableBillboardLeader, InitialGameDataResponse, Inventory, Item,
-            Kit, LeaderboardResponse, OverviewLeaderboardResponse, PlayerUgcLimits,
-            ReachThisWrapper, RunnersRouteData, UgcId, UgcMeta,
+            Bookmarks, Division, Entry, HackableBillboardLeader, InitialGameDataResponse,
+            Inventory, Item, Kit, LeaderboardResponse, OverviewLeaderboardResponse,
+            PlayerUgcLimits, ReachThisWrapper, RunnersRouteData, UgcId, UgcMeta,
         },
         ugc::CreateReachThisMeta,
     },
@@ -81,6 +81,29 @@ pub trait PamplonaAuthenticated {
 
     #[method(name = "getLatestPlayed", with_extensions)]
     async fn get_latest_played(&self) -> RpcResult<Vec<Entry>>;
+
+    #[method(name = "getBookmarks", with_extensions)]
+    async fn get_bookmarks(&self, level_ids: Vec<i32>) -> RpcResult<Bookmarks>;
+
+    #[method(name = "addUGCBookmark", with_extensions)]
+    async fn add_ugc_bookmark(&self, ugc_type: String, ugc_id: UgcId) -> RpcResult<String>;
+
+    #[method(name = "removeUGCBookmark", with_extensions)]
+    async fn remove_ugc_bookmark(&self, ugc_type: String, ugc_id: UgcId) -> RpcResult<String>;
+
+    #[method(name = "addChallengeBookmark", with_extensions)]
+    async fn add_challenge_bookmark(
+        &self,
+        challenge_id: String,
+        challenge_type: String,
+    ) -> RpcResult<String>;
+
+    #[method(name = "removeChallengeBookmark", with_extensions)]
+    async fn remove_challenge_bookmark(
+        &self,
+        challenge_id: String,
+        challenge_type: String,
+    ) -> RpcResult<String>;
 
     #[method(name = "getPlayerUgcLimits", with_extensions)]
     async fn get_player_ugc_limits(&self) -> RpcResult<PlayerUgcLimits>;
@@ -286,6 +309,78 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         logic::player::get_latest_played(&self.ctx, persona_id)
             .await
             .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_bookmarks(
+        &self,
+        extensions: &Extensions,
+        _level_ids: Vec<i32>,
+    ) -> RpcResult<Bookmarks> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::bookmark::get_bookmarks(&self.ctx, persona_id)
+            .await
+            .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn add_ugc_bookmark(
+        &self,
+        extensions: &Extensions,
+        _ugc_type: String,
+        ugc_id: UgcId,
+    ) -> RpcResult<String> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        let ugc_uuid = uuid::Uuid::parse_str(&ugc_id.id)
+            .map_err(|_| GatewayError::invalid_params("invalid UGC UUID").into_rpc_err())?;
+        logic::bookmark::add_ugc_bookmark(&self.ctx, persona_id, ugc_uuid)
+            .await
+            .map_err(GatewayError::into_rpc_err)?;
+        Ok("success".to_string())
+    }
+
+    async fn remove_ugc_bookmark(
+        &self,
+        extensions: &Extensions,
+        _ugc_type: String,
+        ugc_id: UgcId,
+    ) -> RpcResult<String> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        let ugc_uuid = uuid::Uuid::parse_str(&ugc_id.id)
+            .map_err(|_| GatewayError::invalid_params("invalid UGC UUID").into_rpc_err())?;
+        logic::bookmark::remove_ugc_bookmark(&self.ctx, persona_id, ugc_uuid)
+            .await
+            .map_err(GatewayError::into_rpc_err)?;
+        Ok("success".to_string())
+    }
+
+    async fn add_challenge_bookmark(
+        &self,
+        extensions: &Extensions,
+        challenge_id: String,
+        challenge_type: String,
+    ) -> RpcResult<String> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::bookmark::add_challenge_bookmark(
+            &self.ctx,
+            persona_id,
+            challenge_id,
+            challenge_type,
+        )
+        .await
+        .map_err(GatewayError::into_rpc_err)?;
+        Ok("success".to_string())
+    }
+
+    async fn remove_challenge_bookmark(
+        &self,
+        extensions: &Extensions,
+        challenge_id: String,
+        _challenge_type: String,
+    ) -> RpcResult<String> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::bookmark::remove_challenge_bookmark(&self.ctx, persona_id, challenge_id)
+            .await
+            .map_err(GatewayError::into_rpc_err)?;
+        Ok("success".to_string())
     }
 
     async fn get_player_ugc_limits(&self, extensions: &Extensions) -> RpcResult<PlayerUgcLimits> {

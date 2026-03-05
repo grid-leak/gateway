@@ -1,3 +1,4 @@
+pub mod bookmark;
 pub mod challenge;
 pub mod error;
 mod game_data;
