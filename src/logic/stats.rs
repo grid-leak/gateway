@@ -790,7 +790,9 @@ fn merge_stats(
     current_stats: &mut serde_json::Value,
     updates: serde_json::Map<String, serde_json::Value>,
 ) -> Result<(), GatewayError> {
-    let current_map = current_stats.as_object_mut().unwrap();
+    let current_map = current_stats
+        .as_object_mut()
+        .ok_or_else(|| GatewayError::internal("stats is not a JSON object"))?;
 
     for (key, value) in updates {
         if !VALID_STATS_KEYS.contains(&key.as_str()) {

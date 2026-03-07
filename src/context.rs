@@ -34,7 +34,7 @@ impl GatewayContext {
     }
 
     pub fn register_session(&self, session_id: String, persona_id: i32) {
-        let mut sessions = self.sessions.lock().unwrap();
+        let mut sessions = self.sessions.lock().expect("failed to lock sessions");
         let session = Session {
             persona_id,
             created_at: Instant::now(),

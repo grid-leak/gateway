@@ -60,17 +60,23 @@ where
         &self,
         mut request: jsonrpsee::types::Request<'a>,
     ) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
-        if let Some(params) = request.params.clone() {
-            let json_val: serde_json::Value = serde_json::from_str(params.get()).unwrap();
-            let pretty = serde_json::to_string_pretty(&json_val).unwrap();
+        let method = request.method_name();
+        let pretty_params = request
+            .params
+            .as_ref()
+            .and_then(|p| serde_json::from_str::<serde_json::Value>(p.get()).ok())
+            .and_then(|json| serde_json::to_string_pretty(&json).ok());
 
-            println!("{}\n{}", request.method_name(), pretty);
-        } else {
-            println!("{}", request.method_name())
+        match pretty_params {
+            Some(pretty) => println!("{method}\n{pretty}"),
+            None => println!("{method}"),
         }
 
         if request.method_name().starts_with("PamplonaAuthenticated") {
-            let session_type = request.extensions.get::<SessionType>().unwrap();
+            let session_type = request
+                .extensions
+                .get::<SessionType>()
+                .unwrap_or(&SessionType::Unknown);
             let ctx = &self.1;
 
             match session_type {
