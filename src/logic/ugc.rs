@@ -29,12 +29,11 @@ use sea_orm::{
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    sync::Arc,
 };
 use uuid::Uuid;
 
 pub async fn get_initial_game_data(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     level_id: u32,
     persona_id: i32,
 ) -> Result<InitialGameDataResponse, GatewayError> {
@@ -150,7 +149,7 @@ pub async fn get_initial_game_data(
 
             Some(UgcBookmarkEntry {
                 ugc_type: entry.r#type.to_string(),
-                bookmark_time: bm.bookmark_time.to_string(),
+                bookmark_time: bm.bookmark_time.timestamp_millis().to_string(),
                 meta: entry.into_meta(author, &flags),
             })
         })
@@ -160,7 +159,7 @@ pub async fn get_initial_game_data(
         .into_iter()
         .map(|b| ChallengeBookmarkEntry {
             challenge_id: b.challenge_id,
-            bookmark_time: b.bookmark_time.to_string(),
+            bookmark_time: b.bookmark_time.timestamp_millis().to_string(),
             challenge_type: b.challenge_type,
         })
         .collect();
@@ -298,7 +297,7 @@ struct UgcCountResult {
 }
 
 pub async fn get_reach_this_data(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     ugc_ids: Vec<String>,
     data_types: Vec<String>,
     persona_id: i32,
@@ -319,7 +318,7 @@ pub async fn get_reach_this_data(
     let mut user_ranks_map = HashMap::new();
     let mut totals_map = HashMap::new();
 
-    if data_types.contains(&"USER_STATS".to_string()) {
+    if data_types.iter().any(|s| s == "USER_STATS") {
         // Fetch user entries
         let user_entries = ugc_entries::Entity::find()
             .filter(ugc_entries::Column::UserId.eq(persona_id))
@@ -406,7 +405,7 @@ pub async fn get_reach_this_data(
 
     // 2. Fetch Meta if requested
     let mut meta_map = HashMap::new();
-    if data_types.contains(&"META".to_string()) {
+    if data_types.iter().any(|s| s == "META") {
         let ugc_entries = ugc::Entity::find()
             .filter(ugc::Column::Id.is_in(requested_ids.clone()))
             .all(db)

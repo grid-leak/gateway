@@ -13,18 +13,13 @@ use uuid::Uuid;
 
 const UGC_BASE_URL: &str = "https://mec-gw.ops.dice.se/ugc/prod_default/prod_default/pc";
 
-impl UgcType {
-    pub fn to_str(&self) -> &'static str {
-        match self {
-            UgcType::ReachThis => "ReachThis",
-            UgcType::TimeTrial => "TimeTrial",
-        }
-    }
-}
-
 impl fmt::Display for UgcType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_str())
+        let name = match self {
+            UgcType::ReachThis => "ReachThis",
+            UgcType::TimeTrial => "TimeTrial",
+        };
+        write!(f, "{}", name)
     }
 }
 
@@ -48,7 +43,7 @@ impl From<Option<user_ugc_flags::Model>> for UgcFlags {
 
 impl ugc::Model {
     pub fn into_meta(self, author_name: &str, flags: &UgcFlags) -> UgcMeta {
-        let type_id = self.r#type.to_str();
+        let type_id = self.r#type.to_string();
 
         let transform = Transform {
             x: self.x,

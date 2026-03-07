@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, ModelTrait, QueryFilter, Set};
 use uuid::Uuid;
@@ -12,7 +11,7 @@ use crate::{
 };
 
 pub async fn get_inventory(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
 ) -> Result<Inventory, GatewayError> {
     let db = ctx.db();
@@ -54,7 +53,7 @@ pub async fn get_inventory(
 }
 
 pub async fn grant_kit(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
     kit_id: &str,
 ) -> Result<Kit, GatewayError> {
@@ -87,7 +86,7 @@ pub async fn grant_kit(
 }
 
 pub async fn open_kit(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
     kit_id: &str,
 ) -> Result<Vec<Item>, GatewayError> {
@@ -126,7 +125,7 @@ pub async fn open_kit(
 }
 
 pub async fn revoke_kit(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
     kit_id: &str,
 ) -> Result<Vec<Item>, GatewayError> {

@@ -16,15 +16,15 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set,
 };
 
+const MAX_UGC_SLOTS: i32 = 100;
+const MAX_PUBLISHED_SLOTS: i32 = 10;
+
 pub async fn set_player_ghost(
     ctx: &GatewayContext,
     persona_id: i32,
     data: GhostDataInput,
 ) -> Result<(), GatewayError> {
-    let user = Users::find_by_id(persona_id)
-        .one(ctx.db())
-        .await?
-        .ok_or_else(|| GatewayError::internal("user not found"))?;
+    let user = ctx.user(persona_id).await?;
 
     let mut user: users::ActiveModel = user.into();
 
@@ -46,10 +46,7 @@ pub async fn set_player_tag(
     persona_id: i32,
     tag_data: TagData,
 ) -> Result<(), GatewayError> {
-    let user = Users::find_by_id(persona_id)
-        .one(ctx.db())
-        .await?
-        .ok_or_else(|| GatewayError::internal("user not found"))?;
+    let user = ctx.user(persona_id).await?;
 
     let mut user: users::ActiveModel = user.into();
 
@@ -102,20 +99,19 @@ pub async fn get_latest_played(
     persona_id: i32,
 ) -> Result<Vec<Entry>, GatewayError> {
     // Fetch challenge entries
-    let challenge_entries_list = challenge_entries::Entity::find()
-        .filter(challenge_entries::Column::UserId.eq(persona_id))
-        .order_by_desc(challenge_entries::Column::CompletedAt)
-        .limit(20)
-        .all(ctx.db())
-        .await?;
-
-    // Fetch UGC entries
-    let ugc_entries_list = ugc_entries::Entity::find()
-        .filter(ugc_entries::Column::UserId.eq(persona_id))
-        .order_by_desc(ugc_entries::Column::CompletedAt)
-        .limit(20)
-        .all(ctx.db())
-        .await?;
+    let (challenge_entries_list, ugc_entries_list) = tokio::try_join!(
+        challenge_entries::Entity::find()
+            .filter(challenge_entries::Column::UserId.eq(persona_id))
+            .order_by_desc(challenge_entries::Column::CompletedAt)
+            .limit(20)
+            .all(ctx.db()),
+        ugc_entries::Entity::find()
+            .filter(ugc_entries::Column::UserId.eq(persona_id))
+            .order_by_desc(ugc_entries::Column::CompletedAt)
+            .limit(20)
+            .all(ctx.db())
+    )
+    .map_err(GatewayError::from)?;
 
     enum Fetched {
         Challenge(crate::entities::challenge_entries::Model),
@@ -257,8 +253,8 @@ pub async fn get_player_ugc_limits(
 
     Ok(PlayerUgcLimits {
         ugc_count: counts.0 as i32,
-        max_ugc: 100,
+        max_ugc: MAX_UGC_SLOTS,
         published_count: counts.1 as i32,
-        max_published: 100,
+        max_published: MAX_PUBLISHED_SLOTS,
     })
 }

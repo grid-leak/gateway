@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use sea_orm::{ActiveModelTrait, Set};
 
 use crate::{context::GatewayContext, entities::users::ActiveModel, logic::GatewayError};
@@ -776,7 +774,7 @@ const VALID_STATS_KEYS: &[&str] = &[
 ];
 
 pub async fn get_persona_stats(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
 ) -> Result<serde_json::Map<String, serde_json::Value>, GatewayError> {
     let user = ctx.user(persona_id).await?;
@@ -824,7 +822,7 @@ fn merge_stats(
 }
 
 pub async fn update_persona_stats(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
     stats: serde_json::Map<String, serde_json::Value>,
 ) -> Result<String, GatewayError> {

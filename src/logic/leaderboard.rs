@@ -14,7 +14,7 @@ use crate::{
 use sea_orm::{
     ColumnTrait, EntityTrait, Order, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
 };
-use std::{str::FromStr, sync::Arc};
+use std::str::FromStr;
 use uuid::Uuid;
 
 fn user_to_leaderboard_entry(
@@ -38,7 +38,7 @@ fn user_to_leaderboard_entry(
 }
 
 pub async fn get_overview_reach_this_leaderboard(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
     ugc_uuid: String,
     radius: Option<i32>,
@@ -109,7 +109,7 @@ pub async fn get_overview_reach_this_leaderboard(
 }
 
 pub async fn get_overview_challenge_leaderboard(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
     challenge_id: String,
     entry_type: ChallengeEntryType,
@@ -178,7 +178,7 @@ pub async fn get_overview_challenge_leaderboard(
 /// is no friends system yet. Once a friends/followers system is implemented,
 /// this should filter entries to only include the user's friends.
 pub async fn get_challenge_leaderboard(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
     challenge_id: String,
     entry_type: ChallengeEntryType,

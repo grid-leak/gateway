@@ -13,6 +13,7 @@ use tower::{Layer, Service};
 
 const GATEWAY_SESSION_HEADER: HeaderName = HeaderName::from_static("x-gatewaysession");
 static SECRET: OnceLock<Vec<u8>> = OnceLock::new();
+static CLIENT_ID: OnceLock<String> = OnceLock::new();
 
 pub fn init_secret() -> Result<(), String> {
     let secret_hex =
@@ -24,6 +25,12 @@ pub fn init_secret() -> Result<(), String> {
     SECRET
         .set(secret)
         .map_err(|_| "SECRET already initialized".to_string())?;
+
+    let client_id =
+        env::var("GATEWAY_CLIENT_ID").map_err(|_| "GATEWAY_CLIENT_ID must be set".to_string())?;
+    CLIENT_ID
+        .set(client_id)
+        .map_err(|_| "CLIENT_ID already initialized".to_string())?;
 
     Ok(())
 }
@@ -37,7 +44,12 @@ pub enum SessionType {
 fn derive_key(session_id: &str) -> [u8; 16] {
     let mut hasher = Sha256::new();
     hasher.update(SECRET.get().expect("SECRET not initialized"));
-    hasher.update(env::var("GATEWAY_CLIENT_ID").expect("GATEWAY_CLIENT_ID must be set"));
+    hasher.update(
+        CLIENT_ID
+            .get()
+            .expect("CLIENT_ID not initialized")
+            .as_bytes(),
+    );
     hasher.update(session_id.as_bytes());
     let hash = hasher.finalize();
 
@@ -150,7 +162,6 @@ where
                     SessionType::Identified(id) => id.clone(),
                     SessionType::Unknown => {
                         tracing::warn!("Encrypted request without session ID");
-                        println!("Encrypted request without session ID");
                         // Cannot decrypt without session ID
                         let mut new_req = Request::from_parts(parts, Full::new(body_bytes));
                         new_req.extensions_mut().insert(session);

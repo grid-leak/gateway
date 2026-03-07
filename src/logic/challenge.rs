@@ -16,7 +16,6 @@ use sea_orm::{
     sea_query::{Alias, Expr, JoinType, OnConflict, PostgresQueryBuilder, Query},
 };
 use std::collections::HashMap;
-use std::sync::Arc;
 
 struct RunnersRouteThreshold {
     id: &'static str,
@@ -167,7 +166,7 @@ struct CountResult {
 }
 
 pub async fn get_runners_route_data(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     challenge_ids: Vec<String>,
     _data_types: Vec<String>,
     persona_id: i32,
@@ -305,7 +304,7 @@ pub async fn get_runners_route_data(
 // currently it's global and returns the latest user that has an entry
 // which could potentially be more interesting than the original server
 pub async fn get_hackable_billboard_friends_leaders(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     challenge_ids: Vec<String>,
 ) -> Result<HashMap<String, Option<HackableBillboardLeader>>, GatewayError> {
     if challenge_ids.is_empty() {
@@ -313,37 +312,52 @@ pub async fn get_hackable_billboard_friends_leaders(
     }
 
     let db = ctx.db();
+
+    let all_entries = challenge_entries::Entity::find()
+        .filter(challenge_entries::Column::ChallengeId.is_in(challenge_ids.clone()))
+        .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::HackableBillboard))
+        .order_by_desc(challenge_entries::Column::CompletedAt)
+        .all(db)
+        .await?;
+
+    let mut latest_by_challenge: HashMap<String, challenge_entries::Model> = HashMap::new();
+    for entry in all_entries {
+        latest_by_challenge
+            .entry(entry.challenge_id.clone())
+            .or_insert(entry);
+    }
+
+    let user_ids: Vec<i32> = latest_by_challenge.values().map(|e| e.user_id).collect();
+    let users_map: HashMap<i32, crate::entities::users::Model> =
+        crate::entities::users::Entity::find()
+            .filter(crate::entities::users::Column::PersonaId.is_in(user_ids))
+            .all(db)
+            .await?
+            .into_iter()
+            .map(|u| (u.persona_id, u))
+            .collect();
+
     let mut response_map = HashMap::new();
 
     for challenge_id in challenge_ids {
-        let entry_opt = challenge_entries::Entity::find()
-            .filter(challenge_entries::Column::ChallengeId.eq(&challenge_id))
-            .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::HackableBillboard))
-            .order_by_desc(challenge_entries::Column::CompletedAt)
-            .find_also_related(crate::entities::users::Entity)
-            .one(db)
-            .await?;
-
-        if let Some((entry, Some(user))) = entry_opt {
-            response_map.insert(
-                challenge_id,
-                Some(HackableBillboardLeader {
+        let leader_opt = latest_by_challenge.get(&challenge_id).and_then(|entry| {
+            users_map
+                .get(&entry.user_id)
+                .map(|user| HackableBillboardLeader {
                     position: 1,
                     score: entry.completed_at.timestamp_millis().to_string(),
                     persona_id: user.persona_id.to_string(),
-                    name: user.name,
-                }),
-            );
-        } else {
-            response_map.insert(challenge_id, None);
-        }
+                    name: user.name.clone(),
+                })
+        });
+        response_map.insert(challenge_id, leader_opt);
     }
 
     Ok(response_map)
 }
 
 pub async fn finish_hackable_billboard(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
     challenge_id: String,
     main_stat: i32,
@@ -430,7 +444,7 @@ fn calculate_division(total_stars: u32) -> Division {
 }
 
 pub async fn finish_runners_route(
-    ctx: &Arc<GatewayContext>,
+    ctx: &GatewayContext,
     persona_id: i32,
     challenge_id: String,
     main_stat: i32,
