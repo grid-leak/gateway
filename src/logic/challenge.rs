@@ -317,39 +317,32 @@ pub async fn get_hackable_billboard_friends_leaders(
         .filter(challenge_entries::Column::ChallengeId.is_in(challenge_ids.clone()))
         .filter(challenge_entries::Column::EntryType.eq(ChallengeEntryType::HackableBillboard))
         .order_by_desc(challenge_entries::Column::CompletedAt)
+        .find_also_related(users::Entity)
         .all(db)
         .await?;
 
-    let mut latest_by_challenge: HashMap<String, challenge_entries::Model> = HashMap::new();
-    for entry in all_entries {
+    let mut latest_by_challenge: HashMap<String, (challenge_entries::Model, Option<users::Model>)> =
+        HashMap::new();
+
+    for (entry, user) in all_entries {
         latest_by_challenge
             .entry(entry.challenge_id.clone())
-            .or_insert(entry);
+            .or_insert((entry, user));
     }
-
-    let user_ids: Vec<i32> = latest_by_challenge.values().map(|e| e.user_id).collect();
-    let users_map: HashMap<i32, crate::entities::users::Model> =
-        crate::entities::users::Entity::find()
-            .filter(crate::entities::users::Column::PersonaId.is_in(user_ids))
-            .all(db)
-            .await?
-            .into_iter()
-            .map(|u| (u.persona_id, u))
-            .collect();
 
     let mut response_map = HashMap::new();
 
     for challenge_id in challenge_ids {
-        let leader_opt = latest_by_challenge.get(&challenge_id).and_then(|entry| {
-            users_map
-                .get(&entry.user_id)
-                .map(|user| HackableBillboardLeader {
+        let leader_opt = latest_by_challenge
+            .get(&challenge_id)
+            .and_then(|(entry, user_opt)| {
+                user_opt.as_ref().map(|user| HackableBillboardLeader {
                     position: 1,
                     score: entry.completed_at.timestamp_millis().to_string(),
                     persona_id: user.persona_id.to_string(),
                     name: user.name.clone(),
                 })
-        });
+            });
         response_map.insert(challenge_id, leader_opt);
     }
 

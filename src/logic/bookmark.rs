@@ -1,7 +1,7 @@
 use crate::{
     context::GatewayContext,
-    entities::{challenge_bookmarks, ugc, ugc_bookmarks},
-    logic::{GatewayError, game_data::BatchUgcLoader},
+    entities::{challenge_bookmarks, ugc, ugc_bookmarks, users},
+    logic::{GatewayError, game_data::load_ugc_flags},
     models::game_data::{Bookmarks, ChallengeBookmarkEntry, UgcBookmarkEntry},
 };
 use chrono::Utc;
@@ -31,19 +31,46 @@ pub async fn get_bookmarks(
         }
     )?;
 
+    // Collect UGC IDs and author IDs from the already-joined UGC models
     let valid_ugcs: Vec<&ugc::Model> = ugc_bm_data
         .iter()
         .filter_map(|(_, ugc_opt)| ugc_opt.as_ref())
         .collect();
 
-    let batch_loader = BatchUgcLoader::load(db, persona_id, &valid_ugcs).await?;
+    let ugc_ids: Vec<uuid::Uuid> = valid_ugcs.iter().map(|u| u.id).collect();
+    let author_ids: Vec<i32> = valid_ugcs
+        .iter()
+        .map(|u| u.author_id)
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    let (flags_map, authors_map) =
+        tokio::try_join!(load_ugc_flags(db, persona_id, &ugc_ids), async {
+            if author_ids.is_empty() {
+                return Ok(std::collections::HashMap::new());
+            }
+            users::Entity::find()
+                .filter(users::Column::PersonaId.is_in(author_ids))
+                .all(db)
+                .await
+                .map(|rows| {
+                    rows.into_iter()
+                        .map(|u| (u.persona_id, u.name))
+                        .collect::<std::collections::HashMap<i32, String>>()
+                })
+                .map_err(GatewayError::from)
+        })?;
 
     let ugc_bookmarks_list: Vec<UgcBookmarkEntry> = ugc_bm_data
         .into_iter()
         .filter_map(|(bm, ugc_opt)| {
             let entry = ugc_opt?;
-            let author = batch_loader.get_author(entry.author_id);
-            let flags = batch_loader.get_flag(&entry.id);
+            let author = authors_map
+                .get(&entry.author_id)
+                .map(|s| s.as_str())
+                .unwrap_or("");
+            let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
             Some(UgcBookmarkEntry {
                 ugc_type: entry.r#type.to_string(),
                 bookmark_time: bm.bookmark_time.timestamp_millis().to_string(),

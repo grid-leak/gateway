@@ -5,10 +5,11 @@ use crate::{
         ugc::{self, UgcType},
         ugc_bookmarks,
         ugc_entries::{self, UgcEntryType},
+        users,
     },
     logic::{
         GameErrorCode, GatewayError,
-        game_data::{BatchUgcLoader, UgcFlags},
+        game_data::{UgcFlags, load_ugc_flags},
     },
     models::{
         game_data::{
@@ -32,32 +33,33 @@ use std::{
 };
 use uuid::Uuid;
 
+const UGC_LIMIT: u64 = 300;
+
 pub async fn get_initial_game_data(
     ctx: &GatewayContext,
     level_id: u32,
     persona_id: i32,
 ) -> Result<InitialGameDataResponse, GatewayError> {
     let db = ctx.db();
-    // The game client might request an invalid Level ID for some reason...
-    // Mimicking the original server's behavior by returning just the player info
     let skip_ugc = level_id != LEVEL_ID_HASH as u32;
 
-    // Fetch User
     let user = ctx.user(persona_id).await?;
 
-    // Define queries
-    let reach_this_query: sea_orm::Select<ugc::Entity> = user
+    let reach_this_query = user
         .find_related(ugc::Entity)
-        .filter(ugc::Column::Type.eq(UgcType::ReachThis));
+        .filter(ugc::Column::Type.eq(UgcType::ReachThis))
+        .find_also_related(users::Entity);
 
-    let time_trial_query: sea_orm::Select<ugc::Entity> = user
+    let time_trial_query = user
         .find_related(ugc::Entity)
-        .filter(ugc::Column::Type.eq(UgcType::TimeTrial));
+        .filter(ugc::Column::Type.eq(UgcType::TimeTrial))
+        .find_also_related(users::Entity);
 
     let random_ugc_query = ugc::Entity::find()
         .filter(ugc::Column::Published.eq(true))
         .filter(ugc::Column::AuthorId.ne(persona_id))
-        .limit(300);
+        .limit(UGC_LIMIT)
+        .find_also_related(users::Entity);
 
     let bookmarks_query = user
         .find_related(ugc_bookmarks::Entity)
@@ -66,46 +68,53 @@ pub async fn get_initial_game_data(
     let challenge_bm_query: sea_orm::Select<challenge_bookmarks::Entity> =
         user.find_related(challenge_bookmarks::Entity);
 
-    let (reach_this, time_trials, random_ugc, bookmarks_data, challenge_bookmarks, inventory) =
-        if skip_ugc {
-            let (inv, c_bm): (Inventory, Vec<challenge_bookmarks::Model>) =
-                tokio::try_join!(super::inventory::get_inventory(ctx, persona_id), async {
-                    challenge_bm_query.all(db).await.map_err(GatewayError::from)
-                })?;
-            (vec![], vec![], vec![], vec![], c_bm, inv)
-        } else {
-            tokio::try_join!(
-                async { reach_this_query.all(db).await.map_err(GatewayError::from) },
-                async { time_trial_query.all(db).await.map_err(GatewayError::from) },
-                async { random_ugc_query.all(db).await.map_err(GatewayError::from) },
-                async { bookmarks_query.all(db).await.map_err(GatewayError::from) },
-                async { challenge_bm_query.all(db).await.map_err(GatewayError::from) },
-                super::inventory::get_inventory(ctx, persona_id),
-            )?
-        };
+    let (
+        reach_this_raw,
+        time_trials_raw,
+        random_ugc_raw,
+        bookmarks_data,
+        challenge_bookmarks,
+        inventory,
+    ) = if skip_ugc {
+        let (inv, c_bm): (Inventory, Vec<challenge_bookmarks::Model>) =
+            tokio::try_join!(super::inventory::get_inventory(ctx, persona_id), async {
+                challenge_bm_query.all(db).await.map_err(GatewayError::from)
+            })?;
+        (vec![], vec![], vec![], vec![], c_bm, inv)
+    } else {
+        tokio::try_join!(
+            async { reach_this_query.all(db).await.map_err(GatewayError::from) },
+            async { time_trial_query.all(db).await.map_err(GatewayError::from) },
+            async { random_ugc_query.all(db).await.map_err(GatewayError::from) },
+            async { bookmarks_query.all(db).await.map_err(GatewayError::from) },
+            async { challenge_bm_query.all(db).await.map_err(GatewayError::from) },
+            super::inventory::get_inventory(ctx, persona_id),
+        )?
+    };
 
-    let valid_bookmark_ugcs: Vec<&ugc::Model> = bookmarks_data
+    let all_ugc_ids: Vec<Uuid> = reach_this_raw
         .iter()
-        .filter_map(|(_bm, ugc_opt): &(ugc_bookmarks::Model, Option<ugc::Model>)| ugc_opt.as_ref())
+        .map(|(ugc, _)| ugc.id)
+        .chain(time_trials_raw.iter().map(|(ugc, _)| ugc.id))
+        .chain(random_ugc_raw.iter().map(|(ugc, _)| ugc.id))
+        .chain(
+            bookmarks_data
+                .iter()
+                .filter_map(|(_, ugc_opt)| ugc_opt.as_ref().map(|u| u.id)),
+        )
+        .collect::<HashSet<_>>()
+        .into_iter()
         .collect();
 
-    // Bulk load authors & flags
-    // Collect references to all UGC models we are about to process
-    let mut all_ugc_refs: Vec<&ugc::Model> = Vec::new();
-    all_ugc_refs.extend(reach_this.iter());
-    all_ugc_refs.extend(time_trials.iter());
-    all_ugc_refs.extend(random_ugc.iter());
-    all_ugc_refs.extend(valid_bookmark_ugcs);
+    let flags_map = load_ugc_flags(db, persona_id, &all_ugc_ids).await?;
 
-    let batch_loader = BatchUgcLoader::load(db, persona_id, &all_ugc_refs).await?;
-
-    // 6. Construct Response Objects
-    let user_reach_this: Vec<UgcWrapper> = reach_this
+    let user_reach_this: Vec<UgcWrapper> = reach_this_raw
         .into_iter()
-        .map(|entry| {
-            // We know the author is the current user
+        .map(|(entry, author_opt)| {
+            let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
+            let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
             UgcWrapper {
-                meta: entry.into_meta(&user.name, &UgcFlags::default()),
+                meta: entry.into_meta(author_name, &flags),
                 stats: None,
                 user_stats: None,
                 user_rank: None,
@@ -113,44 +122,71 @@ pub async fn get_initial_game_data(
         })
         .collect();
 
-    let user_time_trials: Vec<UgcWrapper> = time_trials
+    let user_time_trials: Vec<UgcWrapper> = time_trials_raw
         .into_iter()
-        .map(|entry| UgcWrapper {
-            meta: entry.into_meta(&user.name, &UgcFlags::default()),
-            stats: None,
-            user_stats: None,
-            user_rank: None,
+        .map(|(entry, author_opt)| {
+            let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
+            let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
+            UgcWrapper {
+                meta: entry.into_meta(author_name, &flags),
+                stats: None,
+                user_stats: None,
+                user_rank: None,
+            }
         })
         .collect();
 
-    // Promoted UGC (just Random for now)
-    let mut promoted_ugc = Vec::with_capacity(random_ugc.len());
+    let mut promoted_ugc = Vec::with_capacity(random_ugc_raw.len());
     let mut seen_ids = HashSet::new();
 
-    for entry in random_ugc {
+    for (entry, author_opt) in random_ugc_raw {
         if seen_ids.insert(entry.id) {
-            let author = batch_loader.get_author(entry.author_id);
-            let flags = batch_loader.get_flag(&entry.id);
+            let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
+            let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
             promoted_ugc.push(PromotedUgcWrapper {
-                meta: entry.into_meta(author, &flags),
+                meta: entry.into_meta(author_name, &flags),
                 reason: 3,
             });
         }
     }
 
-    // Bookmarks
+    let bookmark_ugc_models: Vec<ugc::Model> = bookmarks_data
+        .iter()
+        .filter_map(|(_, ugc_opt)| ugc_opt.clone())
+        .collect();
+
+    let bookmark_author_ids: Vec<i32> = bookmark_ugc_models
+        .iter()
+        .map(|u| u.author_id)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    let bookmark_authors: HashMap<i32, String> = if bookmark_author_ids.is_empty() {
+        HashMap::new()
+    } else {
+        users::Entity::find()
+            .filter(crate::entities::users::Column::PersonaId.is_in(bookmark_author_ids))
+            .all(db)
+            .await?
+            .into_iter()
+            .map(|u| (u.persona_id, u.name))
+            .collect()
+    };
+
     let ugc_bookmarks_list: Vec<UgcBookmarkEntry> = bookmarks_data
         .into_iter()
         .filter_map(|(bm, ugc_opt)| {
             let entry = ugc_opt?;
-
-            let author = batch_loader.get_author(entry.author_id);
-            let flags = batch_loader.get_flag(&entry.id);
-
+            let author_name = bookmark_authors
+                .get(&entry.author_id)
+                .map(|s| s.as_str())
+                .unwrap_or("");
+            let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
             Some(UgcBookmarkEntry {
                 ugc_type: entry.r#type.to_string(),
                 bookmark_time: bm.bookmark_time.timestamp_millis().to_string(),
-                meta: entry.into_meta(author, &flags),
+                meta: entry.into_meta(author_name, &flags),
             })
         })
         .collect();
@@ -265,19 +301,18 @@ pub async fn finish_reach_this(
     .exec(db)
     .await?;
 
-    // UGC Meta needs to be returned in the response or
-    // the game will erase the Beat LE from the map
-    let ugc_model = ugc::Entity::find_by_id(ugc_uuid)
+    let (ugc_model, author_opt) = ugc::Entity::find_by_id(ugc_uuid)
+        .find_also_related(users::Entity)
         .one(db)
         .await?
         .ok_or_else(|| GatewayError::internal("UGC not found"))?;
 
-    let batch_loader = BatchUgcLoader::load(db, persona_id, &[&ugc_model]).await?;
-    let author_name = batch_loader.get_author(ugc_model.author_id);
-    let flags = batch_loader.get_flag(&ugc_model.id);
+    let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
+    let flags = load_ugc_flags(db, persona_id, &[ugc_model.id]).await?;
+    let flags_entry = flags.get(&ugc_model.id).cloned().unwrap_or_default();
 
     Ok(ReachThisWrapper {
-        meta: Some(ugc_model.into_meta(author_name, &flags)),
+        meta: Some(ugc_model.into_meta(author_name, &flags_entry)),
         stats: None,
         user_stats: Some(ReachThisUserStats {
             reached_at: now.timestamp_millis().to_string(),
@@ -313,13 +348,11 @@ pub async fn get_reach_this_data(
         .filter_map(|u| Uuid::from_str(u).ok())
         .collect();
 
-    // 1. Fetch User Stats & Ranks if requested
     let mut user_stats_map = HashMap::new();
     let mut user_ranks_map = HashMap::new();
     let mut totals_map = HashMap::new();
 
     if data_types.iter().any(|s| s == "USER_STATS") {
-        // Fetch user entries
         let user_entries = ugc_entries::Entity::find()
             .filter(ugc_entries::Column::UserId.eq(persona_id))
             .filter(ugc_entries::Column::UgcId.is_in(requested_ids.clone()))
@@ -331,7 +364,6 @@ pub async fn get_reach_this_data(
             user_stats_map.insert(entry.ugc_id, entry);
         }
 
-        // Fetch totals
         let totals: Vec<UgcCountResult> = ugc_entries::Entity::find()
             .select_only()
             .column(ugc_entries::Column::UgcId)
@@ -349,7 +381,6 @@ pub async fn get_reach_this_data(
             }
         }
 
-        // Fetch Ranks (Completed At Ascending - earlier is better)
         if !user_stats_map.is_empty() {
             let t1 = Alias::new("t1");
             let t2 = Alias::new("t2");
@@ -359,7 +390,6 @@ pub async fn get_reach_this_data(
             let t1_score = (t1.clone(), ugc_entries::Column::CompletedAt);
             let t2_score = (t2.clone(), ugc_entries::Column::CompletedAt);
 
-            // Count how many people have completed_at < my completed_at
             let join_condition = Expr::col(t1_id.clone())
                 .equals(t2_id.clone())
                 .and(Expr::col(t2_score).lt(Expr::col(t1_score)));
@@ -403,25 +433,24 @@ pub async fn get_reach_this_data(
         }
     }
 
-    // 2. Fetch Meta if requested
     let mut meta_map = HashMap::new();
     if data_types.iter().any(|s| s == "META") {
-        let ugc_entries = ugc::Entity::find()
+        let ugc_rows = ugc::Entity::find()
             .filter(ugc::Column::Id.is_in(requested_ids.clone()))
+            .find_also_related(users::Entity)
             .all(db)
             .await?;
 
-        let batch_loader =
-            BatchUgcLoader::load(db, persona_id, &ugc_entries.iter().collect::<Vec<_>>()).await?;
+        let ugc_ids_for_flags: Vec<Uuid> = ugc_rows.iter().map(|(u, _)| u.id).collect();
+        let flags_map = load_ugc_flags(db, persona_id, &ugc_ids_for_flags).await?;
 
-        for entry in ugc_entries {
-            let author = batch_loader.get_author(entry.author_id);
-            let flags = batch_loader.get_flag(&entry.id);
-            meta_map.insert(entry.id, entry.into_meta(author, &flags));
+        for (entry, author_opt) in ugc_rows {
+            let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
+            let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
+            meta_map.insert(entry.id, entry.into_meta(author_name, &flags));
         }
     }
 
-    // 3. Construct Response
     for ugc_id in ugc_ids {
         let uid = Uuid::from_str(&ugc_id).unwrap_or_default();
 

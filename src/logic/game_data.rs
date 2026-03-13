@@ -1,7 +1,7 @@
 use crate::{
     entities::{
         ugc::{self, UgcType},
-        user_ugc_flags, users,
+        user_ugc_flags,
     },
     logic::GatewayError,
     models::game_data::{LEVEL_ID_HASH, Transform, UgcId, UgcMeta},
@@ -25,8 +25,8 @@ impl fmt::Display for UgcType {
 
 #[derive(Debug, Clone, Default)]
 pub struct UgcFlags {
-    reported: bool,
-    blocked: bool,
+    pub reported: bool,
+    pub blocked: bool,
 }
 
 impl From<Option<user_ugc_flags::Model>> for UgcFlags {
@@ -99,63 +99,26 @@ impl ugc::Model {
     }
 }
 
-pub struct BatchUgcLoader {
-    authors: HashMap<i32, String>,
-    flags: HashMap<Uuid, UgcFlags>,
-}
-
-impl BatchUgcLoader {
-    pub async fn load<C>(
-        db: &C,
-        viewer_id: i32,
-        ugc_entries: &[&ugc::Model],
-    ) -> Result<Self, GatewayError>
-    where
-        C: ConnectionTrait,
-    {
-        if ugc_entries.is_empty() {
-            return Ok(Self {
-                authors: HashMap::new(),
-                flags: HashMap::new(),
-            });
-        }
-
-        let author_ids: Vec<i32> = ugc_entries.iter().map(|e| e.author_id).collect();
-        let ugc_ids: Vec<Uuid> = ugc_entries.iter().map(|e| e.id).collect();
-
-        let (authors_res, flags_res) = tokio::join!(
-            users::Entity::find()
-                .filter(users::Column::PersonaId.is_in(author_ids))
-                .all(db),
-            user_ugc_flags::Entity::find()
-                .filter(user_ugc_flags::Column::UserId.eq(viewer_id))
-                .filter(user_ugc_flags::Column::UgcId.is_in(ugc_ids))
-                .all(db)
-        );
-
-        let authors_map = authors_res
-            .map_err(GatewayError::from)?
-            .into_iter()
-            .map(|u| (u.persona_id, u.name))
-            .collect();
-
-        let flags_map = flags_res
-            .map_err(GatewayError::from)?
-            .into_iter()
-            .map(|f| (f.ugc_id, UgcFlags::from(Some(f))))
-            .collect();
-
-        Ok(Self {
-            authors: authors_map,
-            flags: flags_map,
-        })
+pub async fn load_ugc_flags<C>(
+    db: &C,
+    viewer_id: i32,
+    ugc_ids: &[Uuid],
+) -> Result<HashMap<Uuid, UgcFlags>, GatewayError>
+where
+    C: ConnectionTrait,
+{
+    if ugc_ids.is_empty() {
+        return Ok(HashMap::new());
     }
 
-    pub fn get_author(&self, id: i32) -> &str {
-        self.authors.get(&id).map(|s| s.as_str()).unwrap_or("")
-    }
+    let flags = user_ugc_flags::Entity::find()
+        .filter(user_ugc_flags::Column::UserId.eq(viewer_id))
+        .filter(user_ugc_flags::Column::UgcId.is_in(ugc_ids.to_vec()))
+        .all(db)
+        .await?;
 
-    pub fn get_flag(&self, ugc_id: &Uuid) -> UgcFlags {
-        self.flags.get(ugc_id).cloned().unwrap_or_default()
-    }
+    Ok(flags
+        .into_iter()
+        .map(|f| (f.ugc_id, UgcFlags::from(Some(f))))
+        .collect())
 }

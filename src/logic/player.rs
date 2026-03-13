@@ -28,7 +28,6 @@ pub async fn set_player_ghost(
 
     let mut user: users::ActiveModel = user.into();
 
-    // ignore the provided timestamp and set the current time
     let timestamp = Utc::now().timestamp();
 
     user.ghost_data = Set(serde_json::json!({
@@ -69,7 +68,6 @@ pub async fn get_player_ghosts(
     let ghosts = users
         .into_iter()
         .map(|user| {
-            // TODO: fix weird syntax
             let variation = user.ghost_data["variation"]
                 .as_i64()
                 .unwrap_or(244578012)
@@ -98,8 +96,7 @@ pub async fn get_latest_played(
     ctx: &GatewayContext,
     persona_id: i32,
 ) -> Result<Vec<Entry>, GatewayError> {
-    // Fetch challenge entries
-    let (challenge_entries_list, ugc_entries_list) = tokio::try_join!(
+    let (challenge_entries_list, ugc_entries_with_ugc) = tokio::try_join!(
         challenge_entries::Entity::find()
             .filter(challenge_entries::Column::UserId.eq(persona_id))
             .order_by_desc(challenge_entries::Column::CompletedAt)
@@ -109,46 +106,29 @@ pub async fn get_latest_played(
             .filter(ugc_entries::Column::UserId.eq(persona_id))
             .order_by_desc(ugc_entries::Column::CompletedAt)
             .limit(20)
-            .all(ctx.db())
+            .find_also_related(ugc::Entity)
+            .all(ctx.db()),
     )
     .map_err(GatewayError::from)?;
 
     enum Fetched {
         Challenge(crate::entities::challenge_entries::Model),
-        Ugc(crate::entities::ugc_entries::Model),
+        Ugc(
+            crate::entities::ugc_entries::Model,
+            Option<crate::entities::ugc::Model>,
+        ),
     }
 
     let mut combined: Vec<(chrono::DateTime<chrono::Utc>, Fetched)> = Vec::new();
     for entry in challenge_entries_list {
         combined.push((entry.completed_at, Fetched::Challenge(entry)));
     }
-    for entry in ugc_entries_list {
-        combined.push((entry.completed_at, Fetched::Ugc(entry)));
+    for (entry, ugc_opt) in ugc_entries_with_ugc {
+        combined.push((entry.completed_at, Fetched::Ugc(entry, ugc_opt)));
     }
 
     combined.sort_by(|a, b| b.0.cmp(&a.0));
     combined.truncate(20);
-
-    let mut ugc_ids_to_fetch = Vec::new();
-    for (_, fetched) in &combined {
-        if let Fetched::Ugc(entry) = fetched {
-            ugc_ids_to_fetch.push(entry.ugc_id);
-        }
-    }
-
-    // Fetch UGC metadata for author IDs
-    let ugc_models: std::collections::HashMap<uuid::Uuid, crate::entities::ugc::Model> =
-        if !ugc_ids_to_fetch.is_empty() {
-            ugc::Entity::find()
-                .filter(ugc::Column::Id.is_in(ugc_ids_to_fetch))
-                .all(ctx.db())
-                .await?
-                .into_iter()
-                .map(|u| (u.id, u))
-                .collect()
-        } else {
-            std::collections::HashMap::new()
-        };
 
     let mut results = Vec::new();
 
@@ -175,12 +155,9 @@ pub async fn get_latest_played(
                     }
                 }
             }
-            Fetched::Ugc(entry) => {
+            Fetched::Ugc(entry, ugc_opt) => {
                 let user_stats = entry.user_stats;
-                let author_id = ugc_models
-                    .get(&entry.ugc_id)
-                    .map(|u| u.author_id)
-                    .unwrap_or(0);
+                let author_id = ugc_opt.as_ref().map(|u| u.author_id).unwrap_or(0);
 
                 match entry.entry_type {
                     ugc_entries::UgcEntryType::ReachThis => {
