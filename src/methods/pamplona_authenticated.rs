@@ -1,6 +1,6 @@
 use crate::{
     context::GatewayContext,
-    entities::challenge_entries::ChallengeEntryType,
+    entities::{challenge_entries::ChallengeEntryType, ugc_entries::UgcEntryType},
     logic::{self, GatewayError},
     models::{
         customization::GhostDataInput,
@@ -422,8 +422,13 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     ) -> RpcResult<OverviewLeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
-        logic::leaderboard::get_overview_reach_this_leaderboard(
-            &self.ctx, persona_id, ugc_id.id, radius,
+        logic::leaderboard::get_overview_ugc_leaderboard(
+            &self.ctx,
+            persona_id,
+            ugc_id.id,
+            UgcEntryType::ReachThis,
+            Order::Asc,
+            radius.unwrap_or(3),
         )
         .await
         .map_err(GatewayError::into_rpc_err)
@@ -434,19 +439,17 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         extensions: &Extensions,
         challenge_id: String,
         offset: i64,
-        count: i64,
+        _count: i64,
     ) -> RpcResult<LeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
-        logic::leaderboard::get_challenge_leaderboard(
+        logic::leaderboard::get_challenge_friends_leaderboard(
             &self.ctx,
             persona_id,
             challenge_id,
             ChallengeEntryType::HackableBillboard,
             Order::Desc,
             offset,
-            count,
-            true,
         )
         .await
         .map_err(GatewayError::into_rpc_err)
@@ -476,20 +479,18 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         &self,
         extensions: &Extensions,
         challenge_id: String,
-        count: i64,
+        _count: i64,
         offset: i64,
     ) -> RpcResult<LeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
-        logic::leaderboard::get_challenge_leaderboard(
+        logic::leaderboard::get_challenge_friends_leaderboard(
             &self.ctx,
             persona_id,
             challenge_id,
             ChallengeEntryType::RunnersRoute,
             Order::Asc,
             offset,
-            count,
-            true,
         )
         .await
         .map_err(GatewayError::into_rpc_err)
@@ -511,7 +512,6 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             Order::Asc,
             offset,
             count,
-            false,
         )
         .await
         .map_err(GatewayError::into_rpc_err)
