@@ -353,14 +353,15 @@ pub async fn finish_hackable_billboard(
     ctx: &GatewayContext,
     persona_id: i32,
     challenge_id: String,
-    main_stat: i32,
+    _main_stat: i32,
     _extra_stats: serde_json::Value,
 ) -> Result<String, GatewayError> {
     let db = ctx.db();
     let now = chrono::Utc::now();
+    let timestamp = now.timestamp_millis();
 
     let metadata = ChallengeEntryUserStats::HackableBillboard(HackableBillboardUserStats {
-        finished_at: main_stat.to_string(),
+        finished_at: timestamp.to_string(),
     });
 
     challenge_entries::Entity::insert(challenge_entries::ActiveModel {
@@ -369,7 +370,7 @@ pub async fn finish_hackable_billboard(
         entry_type: Set(ChallengeEntryType::HackableBillboard),
         completed_at: Set(now),
         user_stats: Set(serde_json::to_value(&metadata).unwrap_or_default()),
-        score: Set(main_stat),
+        score: Set(timestamp),
         ..Default::default()
     })
     .on_conflict(
@@ -440,7 +441,7 @@ pub async fn finish_runners_route(
     ctx: &GatewayContext,
     persona_id: i32,
     challenge_id: String,
-    main_stat: i32,
+    main_stat: i64,
     extra_stats: serde_json::Value,
     run_id: i32,
 ) -> Result<Division, GatewayError> {
@@ -520,7 +521,7 @@ pub async fn finish_runners_route(
 
     let total_stars: u32 = all_entries
         .iter()
-        .map(|e| calculate_stars(&e.challenge_id, e.score))
+        .map(|e| calculate_stars(&e.challenge_id, e.score as i32))
         .sum();
 
     let division = calculate_division(total_stars);

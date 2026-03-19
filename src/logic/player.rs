@@ -127,6 +127,7 @@ pub async fn get_latest_played(
         combined.push((entry.completed_at, Fetched::Ugc(entry, ugc_opt)));
     }
 
+    // TODO: Only include specific Hackable Billboards that show up on the map
     combined.sort_by(|a, b| b.0.cmp(&a.0));
     combined.truncate(20);
 
@@ -140,7 +141,7 @@ pub async fn get_latest_played(
                     challenge_entries::ChallengeEntryType::HackableBillboard => {
                         if let Ok(stats) = serde_json::from_value(user_stats) {
                             results.push(Entry::Challenge(ChallengeEntry::HackableBillboard {
-                                challenge_id: entry.challenge_id,
+                                id: entry.challenge_id,
                                 stats,
                             }));
                         }
@@ -148,7 +149,7 @@ pub async fn get_latest_played(
                     challenge_entries::ChallengeEntryType::RunnersRoute => {
                         if let Ok(stats) = serde_json::from_value(user_stats) {
                             results.push(Entry::Challenge(ChallengeEntry::RunnersRoute {
-                                challenge_id: entry.challenge_id,
+                                id: entry.challenge_id,
                                 stats,
                             }));
                         }

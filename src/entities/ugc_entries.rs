@@ -26,7 +26,7 @@ pub struct Model {
     pub entry_type: UgcEntryType,
     #[sea_orm(indexed)]
     pub completed_at: DateTimeUtc,
-    pub score: i32,
+    pub score: i64,
     #[sea_orm(column_type = "JsonBinary", default = "'{}'")]
     pub user_stats: Json,
 }

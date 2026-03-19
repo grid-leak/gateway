@@ -18,13 +18,13 @@ use crate::{
             UgcMeta, UgcWrapper, UserRank,
         },
         ugc::CreateReachThisMeta,
-        user_stats::ReachThisUserStats,
+        user_stats::{ReachThisUserStats, UgcEntryUserStats},
     },
 };
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, ModelTrait,
-    QueryFilter, QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter,
+    QuerySelect, Set,
     sea_query::{Alias, Expr, JoinType, PostgresQueryBuilder, Query},
 };
 use std::{
@@ -37,21 +37,21 @@ const UGC_LIMIT: u64 = 300;
 
 pub async fn get_initial_game_data(
     ctx: &GatewayContext,
-    level_id: u32,
+    level_id: i64,
     persona_id: i32,
 ) -> Result<InitialGameDataResponse, GatewayError> {
     let db = ctx.db();
-    let skip_ugc = level_id != LEVEL_ID_HASH as u32;
+    let skip_ugc = level_id as i32 != LEVEL_ID_HASH;
 
     let user = ctx.user(persona_id).await?;
 
-    let reach_this_query = user
-        .find_related(ugc::Entity)
+    let reach_this_query = ugc::Entity::find()
+        .filter(ugc::Column::AuthorId.eq(persona_id))
         .filter(ugc::Column::Type.eq(UgcType::ReachThis))
         .find_also_related(users::Entity);
 
-    let time_trial_query = user
-        .find_related(ugc::Entity)
+    let time_trial_query = ugc::Entity::find()
+        .filter(ugc::Column::AuthorId.eq(persona_id))
         .filter(ugc::Column::Type.eq(UgcType::TimeTrial))
         .find_also_related(users::Entity);
 
@@ -61,12 +61,12 @@ pub async fn get_initial_game_data(
         .limit(UGC_LIMIT)
         .find_also_related(users::Entity);
 
-    let bookmarks_query = user
-        .find_related(ugc_bookmarks::Entity)
+    let bookmarks_query = ugc_bookmarks::Entity::find()
+        .filter(ugc_bookmarks::Column::UserId.eq(persona_id))
         .find_also_related(ugc::Entity);
 
-    let challenge_bm_query: sea_orm::Select<challenge_bookmarks::Entity> =
-        user.find_related(challenge_bookmarks::Entity);
+    let challenge_bm_query = challenge_bookmarks::Entity::find()
+        .filter(challenge_bookmarks::Column::UserId.eq(persona_id));
 
     let (
         reach_this_raw,
@@ -275,19 +275,23 @@ pub async fn finish_reach_this(
     ctx: &GatewayContext,
     persona_id: i32,
     ugc_id: String,
-) -> Result<ReachThisWrapper, GatewayError> {
+) -> Result<(), GatewayError> {
     let db = ctx.db();
     let now = chrono::Utc::now();
     let ugc_uuid =
         Uuid::from_str(&ugc_id).map_err(|_| GatewayError::invalid_params("invalid UGC UUID"))?;
+
+    let metadata = UgcEntryUserStats::ReachThis(ReachThisUserStats {
+        reached_at: now.timestamp_millis().to_string(),
+    });
 
     ugc_entries::Entity::insert(ugc_entries::ActiveModel {
         user_id: Set(persona_id),
         ugc_id: Set(ugc_uuid),
         entry_type: Set(UgcEntryType::ReachThis),
         completed_at: Set(now),
-        user_stats: Set(serde_json::Value::Null),
-        score: Set(0),
+        user_stats: Set(serde_json::to_value(&metadata).unwrap_or_default()),
+        score: Set(now.timestamp_millis()),
         ..Default::default()
     })
     .on_conflict(
@@ -301,28 +305,7 @@ pub async fn finish_reach_this(
     .exec(db)
     .await?;
 
-    let (ugc_model, author_opt) = ugc::Entity::find_by_id(ugc_uuid)
-        .find_also_related(users::Entity)
-        .one(db)
-        .await?
-        .ok_or_else(|| GatewayError::internal("UGC not found"))?;
-
-    let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
-    let flags = load_ugc_flags(db, persona_id, &[ugc_model.id]).await?;
-    let flags_entry = flags.get(&ugc_model.id).cloned().unwrap_or_default();
-
-    Ok(ReachThisWrapper {
-        meta: Some(ugc_model.into_meta(author_name, &flags_entry)),
-        stats: None,
-        user_stats: Some(ReachThisUserStats {
-            reached_at: now.timestamp_millis().to_string(),
-        }),
-        user_rank: Some(UserRank {
-            rank: 1,
-            score: now.timestamp_millis().to_string(),
-            total: 1,
-        }),
-    })
+    Ok(())
 }
 
 #[derive(Debug, FromQueryResult)]
