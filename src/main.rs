@@ -1,11 +1,12 @@
 use dotenvy::dotenv;
-use hyper::body::Bytes;
+use hyper::{Method, body::Bytes, header};
 use jsonrpsee::{RpcModule, core::middleware::RpcServiceBuilder, server::Server};
 use sea_orm::Database;
 use std::{env, error::Error, net::SocketAddr, sync::Arc, time::Duration};
 use tower_http::{
     LatencyUnit,
     compression::CompressionLayer,
+    cors::{Any, CorsLayer},
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
 };
 
@@ -69,10 +70,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .make_span_with(DefaultMakeSpan::new())
         .on_response(DefaultOnResponse::new().latency_unit(LatencyUnit::Micros));
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([header::CONTENT_TYPE]);
+
     let service_builder = tower::ServiceBuilder::new()
         .layer(HttpMiddlewareLayer::new())
         .layer(CompressionLayer::new())
-        .layer(trace_layer);
+        .layer(trace_layer)
+        .layer(cors);
 
     // The context will be shared between the RPC methods and the RPC middleware
     let context = Arc::new(GatewayContext::new(db.clone()));

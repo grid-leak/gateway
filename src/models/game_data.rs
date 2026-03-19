@@ -115,6 +115,17 @@ pub struct UgcId {
     pub id: String,
 }
 
+#[serde_as]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct PersonaId(#[serde_as(as = "PickFirst<(DisplayFromStr, _)>")] pub i32);
+
+impl From<PersonaId> for i32 {
+    fn from(id: PersonaId) -> i32 {
+        id.0
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Transform {
@@ -227,13 +238,11 @@ pub enum UgcEntry {
 #[serde(tag = "challengeType")]
 pub enum ChallengeEntry {
     HackableBillboard {
-        #[serde(rename = "challengeId")]
-        challenge_id: String,
+        id: String,
         stats: HackableBillboardUserStats,
     },
     RunnersRoute {
-        #[serde(rename = "challengeId")]
-        challenge_id: String,
+        id: String,
         stats: RunnersRouteUserStats,
     },
 }

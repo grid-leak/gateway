@@ -7,7 +7,7 @@ use crate::{
         game_data::{
             Bookmarks, Division, Entry, HackableBillboardLeader, InitialGameDataResponse,
             Inventory, Item, Kit, LeaderboardResponse, OverviewLeaderboardResponse,
-            PlayerUgcLimits, ReachThisWrapper, RunnersRouteData, UgcId, UgcMeta,
+            PlayerUgcLimits, RunnersRouteData, UgcId, UgcMeta,
         },
         ugc::CreateReachThisMeta,
     },
@@ -28,7 +28,7 @@ pub trait PamplonaAuthenticated {
     #[method(name = "getInitialGameData", with_extensions)]
     async fn get_initial_game_data(
         &self,
-        level_ids: Vec<u32>,
+        level_ids: Vec<i64>,
     ) -> RpcResult<InitialGameDataResponse>;
 
     #[method(name = "getInventory", with_extensions)]
@@ -116,7 +116,7 @@ pub trait PamplonaAuthenticated {
     ) -> RpcResult<UgcMeta>;
 
     #[method(name = "finishReachThis", with_extensions)]
-    async fn finish_reach_this(&self, ugc_id: UgcId) -> RpcResult<ReachThisWrapper>;
+    async fn finish_reach_this(&self, ugc_id: UgcId) -> RpcResult<String>;
 
     #[method(name = "getOverviewReachThisLeaderboard", with_extensions)]
     async fn get_overview_reach_this_leaderboard(
@@ -129,7 +129,7 @@ pub trait PamplonaAuthenticated {
     async fn get_hackable_billboard_friends_leaderboard(
         &self,
         challenge_id: String,
-        offset: i64,
+        offset: Option<i64>,
         count: i64,
     ) -> RpcResult<LeaderboardResponse>;
 
@@ -137,7 +137,7 @@ pub trait PamplonaAuthenticated {
     async fn get_overview_runners_route_leaderboard(
         &self,
         challenge_id: String,
-        radius: i32,
+        radius: Option<i32>,
     ) -> RpcResult<OverviewLeaderboardResponse>;
 
     #[method(name = "getRunnersRouteFriendsLeaderboard", with_extensions)]
@@ -145,7 +145,7 @@ pub trait PamplonaAuthenticated {
         &self,
         challenge_id: String,
         count: i64,
-        offset: i64,
+        offset: Option<i64>,
     ) -> RpcResult<LeaderboardResponse>;
 
     #[method(name = "getRunnersRouteLeaderboard", with_extensions)]
@@ -153,7 +153,7 @@ pub trait PamplonaAuthenticated {
         &self,
         challenge_id: String,
         count: i64,
-        offset: i64,
+        offset: Option<i64>,
     ) -> RpcResult<LeaderboardResponse>;
 
     #[method(name = "finishRunnersRoute", with_extensions)]
@@ -181,7 +181,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     async fn get_initial_game_data(
         &self,
         extensions: &Extensions,
-        level_ids: Vec<u32>,
+        level_ids: Vec<i64>,
     ) -> RpcResult<InitialGameDataResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::ugc::get_initial_game_data(&self.ctx, level_ids[0], persona_id)
@@ -403,15 +403,12 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             .map_err(GatewayError::into_rpc_err)
     }
 
-    async fn finish_reach_this(
-        &self,
-        extensions: &Extensions,
-        ugc_id: UgcId,
-    ) -> RpcResult<ReachThisWrapper> {
+    async fn finish_reach_this(&self, extensions: &Extensions, ugc_id: UgcId) -> RpcResult<String> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::ugc::finish_reach_this(&self.ctx, persona_id, ugc_id.id)
             .await
-            .map_err(GatewayError::into_rpc_err)
+            .map_err(GatewayError::into_rpc_err)?;
+        Ok("success".to_string())
     }
 
     async fn get_overview_reach_this_leaderboard(
@@ -438,7 +435,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         &self,
         extensions: &Extensions,
         challenge_id: String,
-        offset: i64,
+        offset: Option<i64>,
         _count: i64,
     ) -> RpcResult<LeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
@@ -449,7 +446,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             challenge_id,
             ChallengeEntryType::HackableBillboard,
             Order::Desc,
-            offset,
+            offset.unwrap_or(3),
         )
         .await
         .map_err(GatewayError::into_rpc_err)
@@ -459,7 +456,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         &self,
         extensions: &Extensions,
         challenge_id: String,
-        radius: i32,
+        radius: Option<i32>,
     ) -> RpcResult<OverviewLeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
@@ -469,7 +466,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             challenge_id,
             ChallengeEntryType::RunnersRoute,
             Order::Asc,
-            radius,
+            radius.unwrap_or(3),
         )
         .await
         .map_err(GatewayError::into_rpc_err)
@@ -480,7 +477,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         extensions: &Extensions,
         challenge_id: String,
         _count: i64,
-        offset: i64,
+        offset: Option<i64>,
     ) -> RpcResult<LeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
@@ -490,7 +487,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             challenge_id,
             ChallengeEntryType::RunnersRoute,
             Order::Asc,
-            offset,
+            offset.unwrap_or(3),
         )
         .await
         .map_err(GatewayError::into_rpc_err)
@@ -500,7 +497,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         extensions: &Extensions,
         challenge_id: String,
         count: i64,
-        offset: i64,
+        offset: Option<i64>,
     ) -> RpcResult<LeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
@@ -510,7 +507,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             challenge_id,
             ChallengeEntryType::RunnersRoute,
             Order::Asc,
-            offset,
+            offset.unwrap_or(3),
             count,
         )
         .await
@@ -530,7 +527,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             &self.ctx,
             persona_id,
             challenge_id,
-            main_stat,
+            main_stat as i64,
             extra_stats,
             run_id,
         )
