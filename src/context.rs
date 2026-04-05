@@ -28,7 +28,6 @@ impl GatewayContext {
         }
     }
 
-    // TODO: explore switching to "services", eg. find_user, find_ugc, etc
     pub fn db(&self) -> &DatabaseConnection {
         &self.db
     }

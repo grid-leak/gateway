@@ -8,10 +8,9 @@ use crate::{
 };
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use std::collections::HashMap;
+use std::env;
 use std::fmt;
 use uuid::Uuid;
-
-const UGC_BASE_URL: &str = "https://mec-gw.ops.dice.se/ugc/prod_default/prod_default/pc";
 
 impl fmt::Display for UgcType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -69,10 +68,8 @@ impl ugc::Model {
                 (Some(pos), None, None)
             }
             UgcType::TimeTrial => {
-                let url = format!(
-                    "{}/{}/{}/{}",
-                    UGC_BASE_URL, type_id, self.author_id, self.id
-                );
+                let base_url = env::var("UGC_BASE_URL").expect("UGC_BASE_URL must be set");
+                let url = format!("{}/{}", base_url, self.id);
                 (None, Some(transform.clone()), Some(url))
             }
         };

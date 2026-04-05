@@ -5,6 +5,9 @@ edition = "2024"
 
 [dependencies]
 aes = "0.8.4"
+aws-config = "1.8.15"
+aws-sdk-s3 = "1.127.0"
+base64 = "0.22.1"
 bytes = "1.11.0"
 cbc = { version = "0.1.2", features = ["alloc"] }
 chrono = "0.4.43"

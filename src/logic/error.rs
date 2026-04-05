@@ -11,6 +11,7 @@ pub enum GameErrorCode {
     ReAuth,
     // -32502: Hard disconnect (auth failed), no retry
     HardDisconnect,
+    NotFound,
     // 200
     TooManyUgc,
     // 201
@@ -30,6 +31,7 @@ impl GameErrorCode {
             GameErrorCode::RetryNow => -101,
             GameErrorCode::ReAuth => -32501,
             GameErrorCode::HardDisconnect => -32502,
+            GameErrorCode::NotFound => -32503,
             GameErrorCode::TooManyUgc => 200,
             GameErrorCode::TooManyPublishedUgc => 201,
             GameErrorCode::TooManyBookmarks => 202,
@@ -39,6 +41,7 @@ impl GameErrorCode {
     }
 }
 
+#[derive(Debug)]
 pub struct GatewayError(ErrorObjectOwned);
 
 impl GatewayError {

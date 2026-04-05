@@ -1,5 +1,6 @@
 use dotenvy::dotenv;
 use hyper::{Method, body::Bytes, header};
+use std::sync::OnceLock;
 use jsonrpsee::{RpcModule, core::middleware::RpcServiceBuilder, server::Server};
 use sea_orm::Database;
 use std::{env, error::Error, net::SocketAddr, sync::Arc, time::Duration};
@@ -25,10 +26,15 @@ use crate::{
         pamplona_authenticated::{PamplonaAuthenticatedImpl, PamplonaAuthenticatedServer},
     },
     middleware::{
+        checkpoints::CheckpointsRouteLayer,
         http::{HttpMiddlewareLayer, init_secret},
         rpc::RpcMiddlewareLayer,
+        upload::UploadRouteLayer,
     },
 };
+
+pub static S3_CLIENT: OnceLock<aws_sdk_s3::Client> = OnceLock::new();
+pub static S3_BUCKET: OnceLock<String> = OnceLock::new();
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -75,14 +81,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE]);
 
+    let s3_config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+
+    let s3_client = aws_sdk_s3::Client::from_conf(
+        aws_sdk_s3::config::Builder::from(&s3_config)
+            .endpoint_url(env::var("S3_ENDPOINT").expect("S3_ENDPOINT must be set"))
+            .force_path_style(true)
+            .build(),
+    );
+
+    let s3_bucket = env::var("S3_BUCKET").expect("S3_BUCKET must be set");
+
+    S3_CLIENT.set(s3_client).expect("failed to set S3_CLIENT");
+    S3_BUCKET.set(s3_bucket).expect("failed to set S3_BUCKET");
+
+    // The context will be shared between the RPC methods and the RPC middleware
+    let context = Arc::new(GatewayContext::new(db.clone()));
+
     let service_builder = tower::ServiceBuilder::new()
+        .layer(UploadRouteLayer {
+            ctx: context.clone(),
+        })
+        .layer(CheckpointsRouteLayer {
+            ctx: context.clone(),
+        })
         .layer(HttpMiddlewareLayer::new())
         .layer(CompressionLayer::new())
         .layer(trace_layer)
         .layer(cors);
-
-    // The context will be shared between the RPC methods and the RPC middleware
-    let context = Arc::new(GatewayContext::new(db.clone()));
 
     let rpc_middleware = RpcServiceBuilder::new().layer(RpcMiddlewareLayer::new(context.clone()));
 

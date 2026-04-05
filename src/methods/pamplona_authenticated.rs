@@ -1,6 +1,6 @@
 use crate::{
     context::GatewayContext,
-    entities::{challenge_entries::ChallengeEntryType, ugc_entries::UgcEntryType},
+    entities::{challenge_entries::ChallengeEntryType, ugc, ugc_entries::UgcEntryType},
     logic::{self, GatewayError},
     models::{
         customization::GhostDataInput,
@@ -9,7 +9,7 @@ use crate::{
             Inventory, Item, Kit, LeaderboardResponse, OverviewLeaderboardResponse,
             PlayerUgcLimits, RunnersRouteData, UgcId, UgcMeta,
         },
-        ugc::CreateReachThisMeta,
+        ugc::{CreateReachThisMeta, CreateTimeTrialMeta},
     },
 };
 use jsonrpsee::{
@@ -17,7 +17,7 @@ use jsonrpsee::{
     core::{RpcResult, async_trait},
 };
 use jsonrpsee_proc_macros::rpc;
-use sea_orm::Order;
+use sea_orm::{EntityTrait, Order};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -105,7 +105,7 @@ pub trait PamplonaAuthenticated {
         challenge_type: String,
     ) -> RpcResult<String>;
 
-    #[method(name = "getPlayerUgcLimits", with_extensions)]
+    #[method(name = "getPlayerUGCLimits", with_extensions)]
     async fn get_player_ugc_limits(&self) -> RpcResult<PlayerUgcLimits>;
 
     #[method(name = "createReachThis", with_extensions)]
@@ -115,11 +115,25 @@ pub trait PamplonaAuthenticated {
         meta: CreateReachThisMeta,
     ) -> RpcResult<UgcMeta>;
 
+    #[method(name = "createTimeTrial", with_extensions)]
+    async fn create_time_trial(
+        &self,
+        data: String,
+        meta: CreateTimeTrialMeta,
+    ) -> RpcResult<UgcMeta>;
+
     #[method(name = "finishReachThis", with_extensions)]
     async fn finish_reach_this(&self, ugc_id: UgcId) -> RpcResult<String>;
 
     #[method(name = "getOverviewReachThisLeaderboard", with_extensions)]
     async fn get_overview_reach_this_leaderboard(
+        &self,
+        ugc_id: UgcId,
+        radius: Option<i32>,
+    ) -> RpcResult<OverviewLeaderboardResponse>;
+
+    #[method(name = "getOverviewTimeTrialLeaderboard", with_extensions)]
+    async fn get_overview_time_trial_leaderboard(
         &self,
         ugc_id: UgcId,
         radius: Option<i32>,
@@ -164,6 +178,22 @@ pub trait PamplonaAuthenticated {
         extra_stats: serde_json::Value,
         run_id: i32,
     ) -> RpcResult<Division>;
+
+    #[method(name = "startTimeTrial", with_extensions)]
+    async fn start_time_trial(&self, ugc_id: UgcId) -> RpcResult<String>;
+
+    #[method(name = "cancelTimeTrial", with_extensions)]
+    async fn cancel_time_trial(&self, ugc_id: UgcId) -> RpcResult<String>;
+
+    #[method(name = "finishTimeTrial", with_extensions)]
+    async fn finish_time_trial(
+        &self,
+        ugc_id: UgcId,
+        finish_time: i64,
+        replay_upload_ticket: String,
+        extra_stats: serde_json::Value,
+        split_times: Vec<i64>,
+    ) -> RpcResult<String>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -403,6 +433,19 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             .map_err(GatewayError::into_rpc_err)
     }
 
+    async fn create_time_trial(
+        &self,
+        extensions: &Extensions,
+        data: String,
+        meta: CreateTimeTrialMeta,
+    ) -> RpcResult<UgcMeta> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+
+        logic::ugc::create_time_trial(&self.ctx, persona_id, data, meta)
+            .await
+            .map_err(GatewayError::into_rpc_err)
+    }
+
     async fn finish_reach_this(&self, extensions: &Extensions, ugc_id: UgcId) -> RpcResult<String> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::ugc::finish_reach_this(&self.ctx, persona_id, ugc_id.id)
@@ -424,6 +467,26 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             persona_id,
             ugc_id.id,
             UgcEntryType::ReachThis,
+            Order::Asc,
+            radius.unwrap_or(3),
+        )
+        .await
+        .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_overview_time_trial_leaderboard(
+        &self,
+        extensions: &Extensions,
+        ugc_id: UgcId,
+        radius: Option<i32>,
+    ) -> RpcResult<OverviewLeaderboardResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+
+        logic::leaderboard::get_overview_ugc_leaderboard(
+            &self.ctx,
+            persona_id,
+            ugc_id.id,
+            UgcEntryType::TimeTrial,
             Order::Asc,
             radius.unwrap_or(3),
         )
@@ -533,5 +596,57 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         )
         .await
         .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn start_time_trial(
+        &self,
+        _extensions: &Extensions,
+        ugc_id: UgcId,
+    ) -> RpcResult<String> {
+        let db = self.ctx.db();
+        let ugc_uuid = uuid::Uuid::parse_str(&ugc_id.id)
+            .map_err(|_| GatewayError::invalid_params("invalid UGC UUID").into_rpc_err())?;
+
+        let ugc = ugc::Entity::find_by_id(ugc_uuid)
+            .one(db)
+            .await
+            .map_err(GatewayError::from)
+            .map_err(GatewayError::into_rpc_err)?;
+
+        if ugc.is_none() {
+            return Err(GatewayError::game(logic::GameErrorCode::NotFound, "UGC not found").into_rpc_err());
+        }
+
+        Ok("success".to_string())
+    }
+
+    async fn cancel_time_trial(&self, _extensions: &Extensions, _ugc_id: UgcId) -> RpcResult<String> {
+        Ok("success".to_string())
+    }
+
+    async fn finish_time_trial(
+        &self,
+        extensions: &Extensions,
+        ugc_id: UgcId,
+        finish_time: i64,
+        replay_upload_ticket: String,
+        extra_stats: serde_json::Value,
+        split_times: Vec<i64>,
+    ) -> RpcResult<String> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        
+        logic::ugc::finish_time_trial(
+            &self.ctx,
+            persona_id,
+            ugc_id.id,
+            finish_time,
+            replay_upload_ticket,
+            extra_stats,
+            split_times,
+        )
+        .await
+        .map_err(GatewayError::into_rpc_err)?;
+
+        Ok("success".to_string())
     }
 }

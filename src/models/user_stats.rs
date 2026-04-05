@@ -39,6 +39,7 @@ pub struct RunnersRouteUserStats {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeTrialUserStats {
+    pub finished_at: String,
     pub finish_time: String,
     pub split_times: Vec<String>,
     pub extra_stats: HashMap<String, String>,

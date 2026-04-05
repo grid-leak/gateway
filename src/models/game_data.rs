@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::{DisplayFromStr, PickFirst, serde_as};
 
+use crate::models::customization::PlayerGhost;
 use crate::models::user_stats::{
     HackableBillboardUserStats, ReachThisUserStats, RunnersRouteUserStats, TimeTrialUserStats,
 };
@@ -73,6 +74,15 @@ pub struct ReachThisWrapper {
     pub meta: Option<UgcMeta>,
     pub stats: Option<()>,
     pub user_stats: Option<ReachThisUserStats>,
+    pub user_rank: Option<UserRank>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeTrialWrapper {
+    pub meta: Option<UgcMeta>,
+    pub stats: Option<()>,
+    pub user_stats: Option<TimeTrialUserStats>,
     pub user_rank: Option<UserRank>,
 }
 
@@ -289,4 +299,11 @@ pub struct LeaderboardUser {
     pub persona_id: String,
     pub name: String,
     pub division: Division,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayUrlResponse {
+    pub url: Option<String>,
+    pub player_ghost: Option<PlayerGhost>,
 }

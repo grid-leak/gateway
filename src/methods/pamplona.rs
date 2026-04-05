@@ -10,14 +10,20 @@ use crate::{
     logic::{self, GatewayError, challenge::get_runners_route_data},
     models::{
         customization::{PlayerGhost, PlayerTagResponse, TagData},
-        game_data::{Entry, PersonaId, PlayerInfo, ReachThisWrapper, RunnersRouteData, UgcId},
+        game_data::{
+            Entry, PersonaId, PlayerInfo, ReachThisWrapper, ReplayUrlResponse, RunnersRouteData,
+            TimeTrialWrapper, UgcId,
+        },
     },
 };
 
 #[rpc(server, namespace = "Pamplona", namespace_separator = ".")]
 pub trait Pamplona {
     #[method(name = "getPlayerTags")]
-    async fn get_player_tags(&self, persona_ids: Vec<PersonaId>) -> RpcResult<Vec<PlayerTagResponse>>;
+    async fn get_player_tags(
+        &self,
+        persona_ids: Vec<PersonaId>,
+    ) -> RpcResult<Vec<PlayerTagResponse>>;
 
     #[method(name = "getPlayerTag")]
     async fn get_player_tag(&self, persona_id: PersonaId) -> RpcResult<TagData>;
@@ -52,6 +58,17 @@ pub trait Pamplona {
         data_types: Vec<String>,
         persona_id: PersonaId,
     ) -> RpcResult<Vec<ReachThisWrapper>>;
+
+    #[method(name = "getTimeTrialData")]
+    async fn get_time_trial_data(
+        &self,
+        ugc_ids: Vec<UgcId>,
+        data_types: Vec<String>,
+        persona_id: PersonaId,
+    ) -> RpcResult<Vec<TimeTrialWrapper>>;
+
+    #[method(name = "getReplayURL")]
+    async fn get_replay_url(&self, ugc_id: UgcId) -> RpcResult<ReplayUrlResponse>;
 }
 
 pub struct PamplonaImpl {
@@ -66,7 +83,10 @@ impl PamplonaImpl {
 
 #[async_trait]
 impl PamplonaServer for PamplonaImpl {
-    async fn get_player_tags(&self, persona_ids: Vec<PersonaId>) -> RpcResult<Vec<PlayerTagResponse>> {
+    async fn get_player_tags(
+        &self,
+        persona_ids: Vec<PersonaId>,
+    ) -> RpcResult<Vec<PlayerTagResponse>> {
         if persona_ids.is_empty() {
             return Ok(vec![]);
         }
@@ -118,9 +138,12 @@ impl PamplonaServer for PamplonaImpl {
     }
 
     async fn get_player_ghosts(&self, persona_ids: Vec<PersonaId>) -> RpcResult<Vec<PlayerGhost>> {
-        logic::player::get_player_ghosts(&self.ctx, persona_ids.into_iter().map(i32::from).collect())
-            .await
-            .map_err(GatewayError::into_rpc_err)
+        logic::player::get_player_ghosts(
+            &self.ctx,
+            persona_ids.into_iter().map(i32::from).collect(),
+        )
+        .await
+        .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_persona_stats(
@@ -155,5 +178,54 @@ impl PamplonaServer for PamplonaImpl {
         logic::ugc::get_reach_this_data(&self.ctx, ugc_ids, data_types, persona_id.into())
             .await
             .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_time_trial_data(
+        &self,
+        ugc_ids: Vec<UgcId>,
+        data_types: Vec<String>,
+        persona_id: PersonaId,
+    ) -> RpcResult<Vec<TimeTrialWrapper>> {
+        let ugc_ids = ugc_ids.into_iter().map(|id| id.id).collect();
+
+        logic::ugc::get_time_trial_data(&self.ctx, ugc_ids, data_types, persona_id.into())
+            .await
+            .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_replay_url(&self, ugc_id: UgcId) -> RpcResult<ReplayUrlResponse> {
+        let player_ghost = logic::player::get_player_ghosts(&self.ctx, vec![ugc_id.user_id])
+            .await
+            .map_err(GatewayError::into_rpc_err)?
+            .into_iter()
+            .next();
+
+        let s3_client = crate::S3_CLIENT.get().expect("S3_CLIENT not initialized");
+        let bucket = crate::S3_BUCKET.get().expect("S3_BUCKET not initialized");
+        let key = format!("{}/{}", ugc_id.user_id, ugc_id.id);
+
+        let presigned_request = s3_client
+            .get_object()
+            .bucket(bucket)
+            .key(&key)
+            .presigned(
+                aws_sdk_s3::presigning::PresigningConfig::expires_in(
+                    std::time::Duration::from_secs(3600),
+                )
+                .map_err(|e| {
+                    GatewayError::internal(format!("Failed to build presigning config: {}", e))
+                        .into_rpc_err()
+                })?,
+            )
+            .await
+            .map_err(|e| {
+                GatewayError::internal(format!("Failed to generate presigned url: {}", e))
+                    .into_rpc_err()
+            })?;
+
+        Ok(ReplayUrlResponse {
+            url: Some(presigned_request.uri().to_string()),
+            player_ghost,
+        })
     }
 }

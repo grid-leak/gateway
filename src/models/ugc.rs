@@ -11,3 +11,13 @@ pub struct CreateReachThisMeta {
     pub published: bool,
     pub transform: Transform,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTimeTrialMeta {
+    pub level_id: u32,
+    pub name: String,
+    pub published: bool,
+    pub transform: Transform,
+    pub teleport_transform: Transform,
+}
