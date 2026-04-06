@@ -468,7 +468,9 @@ pub async fn finish_time_trial(
     }
     .await;
 
-    let _ = crate::S3_CLIENT.get().expect("S3_CLIENT not initialized")
+    let _ = crate::S3_CLIENT
+        .get()
+        .expect("S3_CLIENT not initialized")
         .delete_object()
         .bucket(crate::S3_BUCKET.get().expect("S3_BUCKET not initialized"))
         .key(&ticket_key)

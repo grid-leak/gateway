@@ -1,8 +1,8 @@
 use dotenvy::dotenv;
 use hyper::{Method, body::Bytes, header};
-use std::sync::OnceLock;
 use jsonrpsee::{RpcModule, core::middleware::RpcServiceBuilder, server::Server};
 use sea_orm::Database;
+use std::sync::OnceLock;
 use std::{env, error::Error, net::SocketAddr, sync::Arc, time::Duration};
 use tower_http::{
     LatencyUnit,

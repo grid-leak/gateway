@@ -194,6 +194,38 @@ pub trait PamplonaAuthenticated {
         extra_stats: serde_json::Value,
         split_times: Vec<i64>,
     ) -> RpcResult<String>;
+
+    #[method(name = "getTimeTrialLeaderboard", with_extensions)]
+    async fn get_time_trial_leaderboard(
+        &self,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+    ) -> RpcResult<LeaderboardResponse>;
+
+    #[method(name = "getReachThisLeaderboard", with_extensions)]
+    async fn get_reach_this_leaderboard(
+        &self,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+    ) -> RpcResult<LeaderboardResponse>;
+
+    #[method(name = "getTimeTrialFriendsLeaderboard", with_extensions)]
+    async fn get_time_trial_friends_leaderboard(
+        &self,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+    ) -> RpcResult<LeaderboardResponse>;
+
+    #[method(name = "getReachThisFriendsLeaderboard", with_extensions)]
+    async fn get_reach_this_friends_leaderboard(
+        &self,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+    ) -> RpcResult<LeaderboardResponse>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -499,7 +531,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         extensions: &Extensions,
         challenge_id: String,
         offset: Option<i64>,
-        _count: i64,
+        count: i64,
     ) -> RpcResult<LeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
 
@@ -509,7 +541,8 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             challenge_id,
             ChallengeEntryType::HackableBillboard,
             Order::Desc,
-            offset.unwrap_or(3),
+            offset.unwrap_or(0),
+            count,
         )
         .await
         .map_err(GatewayError::into_rpc_err)
@@ -539,7 +572,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         &self,
         extensions: &Extensions,
         challenge_id: String,
-        _count: i64,
+        count: i64,
         offset: Option<i64>,
     ) -> RpcResult<LeaderboardResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
@@ -550,7 +583,8 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             challenge_id,
             ChallengeEntryType::RunnersRoute,
             Order::Asc,
-            offset.unwrap_or(3),
+            offset.unwrap_or(0),
+            count,
         )
         .await
         .map_err(GatewayError::into_rpc_err)
@@ -598,11 +632,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         .map_err(GatewayError::into_rpc_err)
     }
 
-    async fn start_time_trial(
-        &self,
-        _extensions: &Extensions,
-        ugc_id: UgcId,
-    ) -> RpcResult<String> {
+    async fn start_time_trial(&self, _extensions: &Extensions, ugc_id: UgcId) -> RpcResult<String> {
         let db = self.ctx.db();
         let ugc_uuid = uuid::Uuid::parse_str(&ugc_id.id)
             .map_err(|_| GatewayError::invalid_params("invalid UGC UUID").into_rpc_err())?;
@@ -614,13 +644,19 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             .map_err(GatewayError::into_rpc_err)?;
 
         if ugc.is_none() {
-            return Err(GatewayError::game(logic::GameErrorCode::NotFound, "UGC not found").into_rpc_err());
+            return Err(
+                GatewayError::game(logic::GameErrorCode::NotFound, "UGC not found").into_rpc_err(),
+            );
         }
 
         Ok("success".to_string())
     }
 
-    async fn cancel_time_trial(&self, _extensions: &Extensions, _ugc_id: UgcId) -> RpcResult<String> {
+    async fn cancel_time_trial(
+        &self,
+        _extensions: &Extensions,
+        _ugc_id: UgcId,
+    ) -> RpcResult<String> {
         Ok("success".to_string())
     }
 
@@ -634,7 +670,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         split_times: Vec<i64>,
     ) -> RpcResult<String> {
         let persona_id = *extensions.get::<i32>().unwrap();
-        
+
         logic::ugc::finish_time_trial(
             &self.ctx,
             persona_id,
@@ -648,5 +684,89 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         .map_err(GatewayError::into_rpc_err)?;
 
         Ok("success".to_string())
+    }
+
+    async fn get_time_trial_leaderboard(
+        &self,
+        extensions: &Extensions,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+    ) -> RpcResult<LeaderboardResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::leaderboard::get_ugc_leaderboard(
+            &self.ctx,
+            persona_id,
+            ugc_id.id,
+            UgcEntryType::TimeTrial,
+            Order::Asc,
+            offset.unwrap_or(0),
+            count,
+        )
+        .await
+        .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_reach_this_leaderboard(
+        &self,
+        extensions: &Extensions,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+    ) -> RpcResult<LeaderboardResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::leaderboard::get_ugc_leaderboard(
+            &self.ctx,
+            persona_id,
+            ugc_id.id,
+            UgcEntryType::ReachThis,
+            Order::Asc,
+            offset.unwrap_or(0),
+            count,
+        )
+        .await
+        .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_time_trial_friends_leaderboard(
+        &self,
+        extensions: &Extensions,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+    ) -> RpcResult<LeaderboardResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::leaderboard::get_ugc_friends_leaderboard(
+            &self.ctx,
+            persona_id,
+            ugc_id.id,
+            UgcEntryType::TimeTrial,
+            Order::Asc,
+            offset.unwrap_or(0),
+            count,
+        )
+        .await
+        .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_reach_this_friends_leaderboard(
+        &self,
+        extensions: &Extensions,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+    ) -> RpcResult<LeaderboardResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::leaderboard::get_ugc_friends_leaderboard(
+            &self.ctx,
+            persona_id,
+            ugc_id.id,
+            UgcEntryType::ReachThis,
+            Order::Asc,
+            offset.unwrap_or(0),
+            count,
+        )
+        .await
+        .map_err(GatewayError::into_rpc_err)
     }
 }

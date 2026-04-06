@@ -43,7 +43,7 @@ async fn handle_upload(req: Request<HttpBody>, ctx: Arc<GatewayContext>) -> BoxR
     let content_length: i64 = match content_length_str.parse() {
         Ok(len) if len > 0 && len <= MAX_UPLOAD_BYTES => len,
         Ok(len) if len > MAX_UPLOAD_BYTES => {
-            return text_response(StatusCode::PAYLOAD_TOO_LARGE, "Payload Too Large")
+            return text_response(StatusCode::PAYLOAD_TOO_LARGE, "Payload Too Large");
         }
         _ => return text_response(StatusCode::LENGTH_REQUIRED, "Invalid Length"),
     };
@@ -58,7 +58,9 @@ async fn handle_upload(req: Request<HttpBody>, ctx: Arc<GatewayContext>) -> BoxR
 
     let body_stream = aws_sdk_s3::primitives::ByteStream::from(body_bytes);
 
-    match crate::S3_CLIENT.get().expect("S3_CLIENT not initialized")
+    match crate::S3_CLIENT
+        .get()
+        .expect("S3_CLIENT not initialized")
         .put_object()
         .bucket(crate::S3_BUCKET.get().expect("S3_BUCKET not initialized"))
         .key(s3_key)

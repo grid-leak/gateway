@@ -38,10 +38,9 @@ pub async fn fetch_discord_user(access_token: &str) -> Result<DiscordUser, Gatew
         )));
     }
 
-    let oauth_res = response
-        .json::<OAuth2MeResponse>()
-        .await
-        .map_err(|e| GatewayError::internal(format!("Failed to parse Discord OAuth2 response: {e}")))?;
+    let oauth_res = response.json::<OAuth2MeResponse>().await.map_err(|e| {
+        GatewayError::internal(format!("Failed to parse Discord OAuth2 response: {e}"))
+    })?;
 
     let expected_client_id = std::env::var("DISCORD_CLIENT_ID")
         .map_err(|_| GatewayError::internal("DISCORD_CLIENT_ID must be set".to_string()))?;

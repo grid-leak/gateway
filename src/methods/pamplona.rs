@@ -11,8 +11,8 @@ use crate::{
     models::{
         customization::{PlayerGhost, PlayerTagResponse, TagData},
         game_data::{
-            Entry, PersonaId, PlayerInfo, ReachThisWrapper, ReplayUrlResponse, RunnersRouteData,
-            TimeTrialWrapper, UgcId,
+            Entry, LeaderboardResponse, PersonaId, PlayerInfo, ReachThisWrapper, ReplayUrlResponse,
+            RunnersRouteData, TimeTrialWrapper, UgcId,
         },
     },
 };
@@ -66,6 +66,24 @@ pub trait Pamplona {
         data_types: Vec<String>,
         persona_id: PersonaId,
     ) -> RpcResult<Vec<TimeTrialWrapper>>;
+
+    #[method(name = "getTimeTrialLeaderboard")]
+    async fn get_time_trial_leaderboard(
+        &self,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+        persona_id: PersonaId,
+    ) -> RpcResult<LeaderboardResponse>;
+
+    #[method(name = "getReachThisLeaderboard")]
+    async fn get_reach_this_leaderboard(
+        &self,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+        persona_id: PersonaId,
+    ) -> RpcResult<LeaderboardResponse>;
 
     #[method(name = "getReplayURL")]
     async fn get_replay_url(&self, ugc_id: UgcId) -> RpcResult<ReplayUrlResponse>;
@@ -191,6 +209,46 @@ impl PamplonaServer for PamplonaImpl {
         logic::ugc::get_time_trial_data(&self.ctx, ugc_ids, data_types, persona_id.into())
             .await
             .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_time_trial_leaderboard(
+        &self,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+        persona_id: PersonaId,
+    ) -> RpcResult<LeaderboardResponse> {
+        logic::leaderboard::get_ugc_leaderboard(
+            &self.ctx,
+            persona_id.into(),
+            ugc_id.id,
+            crate::entities::ugc_entries::UgcEntryType::TimeTrial,
+            sea_orm::Order::Asc,
+            offset.unwrap_or(0),
+            count,
+        )
+        .await
+        .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_reach_this_leaderboard(
+        &self,
+        ugc_id: UgcId,
+        count: i64,
+        offset: Option<i64>,
+        persona_id: PersonaId,
+    ) -> RpcResult<LeaderboardResponse> {
+        logic::leaderboard::get_ugc_leaderboard(
+            &self.ctx,
+            persona_id.into(),
+            ugc_id.id,
+            crate::entities::ugc_entries::UgcEntryType::ReachThis,
+            sea_orm::Order::Asc,
+            offset.unwrap_or(0),
+            count,
+        )
+        .await
+        .map_err(GatewayError::into_rpc_err)
     }
 
     async fn get_replay_url(&self, ugc_id: UgcId) -> RpcResult<ReplayUrlResponse> {
