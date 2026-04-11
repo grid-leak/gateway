@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::entities::users;
+use entities::users;
 use crate::logic::GatewayError;
 
 const SESSION_LIFETIME: Duration = Duration::from_secs(24 * 60 * 60);

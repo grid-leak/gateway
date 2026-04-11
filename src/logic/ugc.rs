@@ -1,15 +1,8 @@
 use crate::{
     context::GatewayContext,
-    entities::{
-        challenge_bookmarks,
-        ugc::{self, UgcType},
-        ugc_bookmarks,
-        ugc_entries::{self, UgcEntryType},
-        users,
-    },
     logic::{
         GameErrorCode, GatewayError,
-        game_data::{UgcFlags, load_ugc_flags},
+        game_data::{UgcFlags, load_ugc_flags, ugc_to_meta, ugc_type_to_string},
     },
     models::{
         game_data::{
@@ -20,6 +13,13 @@ use crate::{
         ugc::{CreateReachThisMeta, CreateTimeTrialMeta},
         user_stats::{ReachThisUserStats, TimeTrialUserStats, UgcEntryUserStats},
     },
+};
+use entities::{
+    challenge_bookmarks,
+    ugc::{self, UgcType},
+    ugc_bookmarks,
+    ugc_entries::{self, UgcEntryType},
+    users,
 };
 use chrono::Utc;
 use sea_orm::{
@@ -114,7 +114,7 @@ pub async fn get_initial_game_data(
             let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
             let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
             UgcWrapper {
-                meta: entry.into_meta(author_name, &flags),
+                meta: ugc_to_meta(entry, author_name, &flags),
                 stats: None,
                 user_stats: None,
                 user_rank: None,
@@ -128,7 +128,7 @@ pub async fn get_initial_game_data(
             let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
             let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
             UgcWrapper {
-                meta: entry.into_meta(author_name, &flags),
+                meta: ugc_to_meta(entry, author_name, &flags),
                 stats: None,
                 user_stats: None,
                 user_rank: None,
@@ -144,7 +144,7 @@ pub async fn get_initial_game_data(
             let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
             let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
             promoted_ugc.push(PromotedUgcWrapper {
-                meta: entry.into_meta(author_name, &flags),
+                meta: ugc_to_meta(entry, author_name, &flags),
                 reason: 3,
             });
         }
@@ -166,7 +166,7 @@ pub async fn get_initial_game_data(
         HashMap::new()
     } else {
         users::Entity::find()
-            .filter(crate::entities::users::Column::PersonaId.is_in(bookmark_author_ids))
+            .filter(entities::users::Column::PersonaId.is_in(bookmark_author_ids))
             .all(db)
             .await?
             .into_iter()
@@ -184,9 +184,9 @@ pub async fn get_initial_game_data(
                 .unwrap_or("");
             let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
             Some(UgcBookmarkEntry {
-                ugc_type: entry.r#type.to_string(),
+                ugc_type: ugc_type_to_string(&entry.r#type),
                 bookmark_time: bm.bookmark_time.timestamp_millis().to_string(),
-                meta: entry.into_meta(author_name, &flags),
+                meta: ugc_to_meta(entry, author_name, &flags),
             })
         })
         .collect();
@@ -268,7 +268,7 @@ pub async fn create_reach_this(
 
     let ugc_model: ugc::Model = new_ugc.insert(db).await?;
 
-    Ok(ugc_model.into_meta(&user.name, &UgcFlags::default()))
+    Ok(ugc_to_meta(ugc_model, &user.name, &UgcFlags::default()))
 }
 
 pub async fn create_time_trial(
@@ -327,7 +327,7 @@ pub async fn create_time_trial(
 
                 let ugc_model: ugc::Model = new_ugc.insert(txn).await?;
 
-                crate::entities::ugc_checkpoints::ActiveModel {
+                entities::ugc_checkpoints::ActiveModel {
                     ugc_id: Set(new_id),
                     data: Set(decoded_data),
                 }
@@ -343,7 +343,7 @@ pub async fn create_time_trial(
             sea_orm::TransactionError::Transaction(gw_err) => gw_err,
         })?;
 
-    Ok(ugc_model.into_meta(&user.name, &UgcFlags::default()))
+    Ok(ugc_to_meta(ugc_model, &user.name, &UgcFlags::default()))
 }
 
 pub async fn finish_reach_this(
@@ -602,7 +602,7 @@ pub async fn get_reach_this_data(
         for (entry, author_opt) in ugc_rows {
             let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
             let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
-            meta_map.insert(entry.id, entry.into_meta(author_name, &flags));
+            meta_map.insert(entry.id, ugc_to_meta(entry, author_name, &flags));
         }
     }
 
@@ -756,7 +756,7 @@ pub async fn get_time_trial_data(
         for (entry, author_opt) in ugc_rows {
             let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
             let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
-            meta_map.insert(entry.id, entry.into_meta(author_name, &flags));
+            meta_map.insert(entry.id, ugc_to_meta(entry, author_name, &flags));
         }
     }
 

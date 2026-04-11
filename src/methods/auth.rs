@@ -1,9 +1,9 @@
 use crate::{
     context::GatewayContext,
-    entities::{accounts, users},
     logic::{GatewayError, oauth::fetch_discord_user},
     models::auth::AuthResponse,
 };
+use entities::{accounts, users};
 use jsonrpsee::core::{RpcResult, async_trait};
 use jsonrpsee_proc_macros::rpc;
 use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, EntityTrait, QueryFilter};

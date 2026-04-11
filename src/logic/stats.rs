@@ -1,6 +1,7 @@
 use sea_orm::{ActiveModelTrait, Set};
 
-use crate::{context::GatewayContext, entities::users::ActiveModel, logic::GatewayError};
+use crate::{context::GatewayContext, logic::GatewayError};
+use entities::users::ActiveModel;
 
 const VALID_STATS_KEYS: &[&str] = &[
     "pf_AmbPh3Dt01_Available",

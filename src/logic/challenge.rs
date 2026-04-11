@@ -1,14 +1,14 @@
 use crate::{
     context::GatewayContext,
-    entities::{
-        challenge_entries::{self, ChallengeEntryType},
-        users,
-    },
     logic::GatewayError,
     models::{
         game_data::{Division, HackableBillboardLeader, RunnersRouteData, UserRank},
         user_stats::{ChallengeEntryUserStats, HackableBillboardUserStats, RunnersRouteUserStats},
     },
+};
+use entities::{
+    challenge_entries::{self, ChallengeEntryType},
+    users,
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, ModelTrait,

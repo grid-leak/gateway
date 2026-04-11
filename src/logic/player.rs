@@ -1,7 +1,5 @@
 use crate::{
     context::GatewayContext,
-    entities::{challenge_entries, ugc, ugc_entries},
-    entities::{users, users::Entity as Users},
     logic::GatewayError,
     models::customization::{
         CustomizationOutput, GhostDataInput, GhostDataOutput, PlayerGhost, TagData, TimestampOutput,
@@ -10,6 +8,7 @@ use crate::{
         ChallengeEntry, Division, Entry, PlayerInfo, PlayerUgcLimits, UgcEntry, UgcId,
     },
 };
+use entities::{challenge_entries, ugc, ugc_entries, users, users::Entity as Users};
 use chrono::Utc;
 use sea_orm::prelude::Expr;
 use sea_orm::{
@@ -112,10 +111,10 @@ pub async fn get_latest_played(
     .map_err(GatewayError::from)?;
 
     enum Fetched {
-        Challenge(crate::entities::challenge_entries::Model),
+        Challenge(entities::challenge_entries::Model),
         Ugc(
-            crate::entities::ugc_entries::Model,
-            Option<crate::entities::ugc::Model>,
+            entities::ugc_entries::Model,
+            Option<entities::ugc::Model>,
         ),
     }
 

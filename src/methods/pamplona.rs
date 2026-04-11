@@ -6,7 +6,6 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
 use crate::{
     context::GatewayContext,
-    entities::users,
     logic::{self, GatewayError, challenge::get_runners_route_data},
     models::{
         customization::{PlayerGhost, PlayerTagResponse, TagData},
@@ -16,6 +15,7 @@ use crate::{
         },
     },
 };
+use entities::users;
 
 #[rpc(server, namespace = "Pamplona", namespace_separator = ".")]
 pub trait Pamplona {
@@ -222,7 +222,7 @@ impl PamplonaServer for PamplonaImpl {
             &self.ctx,
             persona_id.into(),
             ugc_id.id,
-            crate::entities::ugc_entries::UgcEntryType::TimeTrial,
+            entities::ugc_entries::UgcEntryType::TimeTrial,
             sea_orm::Order::Asc,
             offset.unwrap_or(0),
             count,
@@ -242,7 +242,7 @@ impl PamplonaServer for PamplonaImpl {
             &self.ctx,
             persona_id.into(),
             ugc_id.id,
-            crate::entities::ugc_entries::UgcEntryType::ReachThis,
+            entities::ugc_entries::UgcEntryType::ReachThis,
             sea_orm::Order::Asc,
             offset.unwrap_or(0),
             count,

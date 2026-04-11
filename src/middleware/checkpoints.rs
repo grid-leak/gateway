@@ -12,8 +12,8 @@ use tower_http::BoxError;
 use uuid::Uuid;
 
 use crate::context::GatewayContext;
-use crate::entities::ugc_checkpoints;
 use crate::middleware::{BoxResponse, binary_response, text_response};
+use entities::ugc_checkpoints;
 
 fn parse_ugc_uuid(path: &str) -> Option<Uuid> {
     // /checkpoints/<ugcId>

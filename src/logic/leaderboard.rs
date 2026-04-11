@@ -1,15 +1,15 @@
 use crate::{
     context::GatewayContext,
-    entities::{
-        challenge_entries::{self, ChallengeEntryType},
-        ugc_entries::{self, UgcEntryType},
-        users,
-    },
     logic::GatewayError,
     models::game_data::{
         Division, LeaderboardResponse, LeaderboardUser, LeaderboardWrapper,
         OverviewLeaderboardResponse,
     },
+};
+use entities::{
+    challenge_entries::{self, ChallengeEntryType},
+    ugc_entries::{self, UgcEntryType},
+    users,
 };
 use sea_orm::{
     ColumnTrait, EntityTrait, Order, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Select,

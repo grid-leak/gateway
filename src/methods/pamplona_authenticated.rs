@@ -1,6 +1,5 @@
 use crate::{
     context::GatewayContext,
-    entities::{challenge_entries::ChallengeEntryType, ugc, ugc_entries::UgcEntryType},
     logic::{self, GatewayError},
     models::{
         customization::GhostDataInput,
@@ -12,6 +11,7 @@ use crate::{
         ugc::{CreateReachThisMeta, CreateTimeTrialMeta},
     },
 };
+use entities::{challenge_entries::ChallengeEntryType, ugc, ugc_entries::UgcEntryType};
 use jsonrpsee::{
     Extensions,
     core::{RpcResult, async_trait},

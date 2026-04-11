@@ -5,10 +5,10 @@ use uuid::Uuid;
 
 use crate::{
     context::GatewayContext,
-    entities::user_kits,
     logic::{GatewayError, kit_data},
     models::game_data::{Inventory, Item, Kit},
 };
+use entities::user_kits;
 
 pub async fn get_inventory(
     ctx: &GatewayContext,

@@ -1,9 +1,9 @@
 use crate::{
     context::GatewayContext,
-    entities::{challenge_bookmarks, ugc, ugc_bookmarks, users},
-    logic::{GatewayError, game_data::load_ugc_flags},
+    logic::{GatewayError, game_data::{load_ugc_flags, ugc_to_meta, ugc_type_to_string}},
     models::game_data::{Bookmarks, ChallengeBookmarkEntry, UgcBookmarkEntry},
 };
+use entities::{challenge_bookmarks, ugc, ugc_bookmarks, users};
 use chrono::Utc;
 use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter, Set, sea_query::OnConflict};
 use uuid::Uuid;
@@ -72,9 +72,9 @@ pub async fn get_bookmarks(
                 .unwrap_or("");
             let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
             Some(UgcBookmarkEntry {
-                ugc_type: entry.r#type.to_string(),
+                ugc_type: ugc_type_to_string(&entry.r#type),
                 bookmark_time: bm.bookmark_time.timestamp_millis().to_string(),
-                meta: entry.into_meta(author, &flags),
+                meta: ugc_to_meta(entry, author, &flags),
             })
         })
         .collect();
