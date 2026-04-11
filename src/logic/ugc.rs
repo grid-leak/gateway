@@ -14,6 +14,7 @@ use crate::{
         user_stats::{ReachThisUserStats, TimeTrialUserStats, UgcEntryUserStats},
     },
 };
+use chrono::Utc;
 use entities::{
     challenge_bookmarks,
     ugc::{self, UgcType},
@@ -21,7 +22,6 @@ use entities::{
     ugc_entries::{self, UgcEntryType},
     users,
 };
-use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DbBackend, EntityTrait, ExprTrait, FromQueryResult, QueryFilter,
     QuerySelect, Set, TransactionTrait,
@@ -92,7 +92,7 @@ pub async fn get_initial_game_data(
         )?
     };
 
-    let all_ugc_ids: Vec<Uuid> = reach_this_raw
+    let mut all_ugc_ids: Vec<Uuid> = reach_this_raw
         .iter()
         .map(|(ugc, _)| ugc.id)
         .chain(time_trials_raw.iter().map(|(ugc, _)| ugc.id))
@@ -102,9 +102,9 @@ pub async fn get_initial_game_data(
                 .iter()
                 .filter_map(|(_, ugc_opt)| ugc_opt.as_ref().map(|u| u.id)),
         )
-        .collect::<HashSet<_>>()
-        .into_iter()
         .collect();
+    all_ugc_ids.sort_unstable();
+    all_ugc_ids.dedup();
 
     let flags_map = load_ugc_flags(db, persona_id, &all_ugc_ids).await?;
 
@@ -150,14 +150,9 @@ pub async fn get_initial_game_data(
         }
     }
 
-    let bookmark_ugc_models: Vec<ugc::Model> = bookmarks_data
+    let bookmark_author_ids: Vec<i32> = bookmarks_data
         .iter()
-        .filter_map(|(_, ugc_opt)| ugc_opt.clone())
-        .collect();
-
-    let bookmark_author_ids: Vec<i32> = bookmark_ugc_models
-        .iter()
-        .map(|u| u.author_id)
+        .filter_map(|(_, ugc_opt)| ugc_opt.as_ref().map(|u| u.author_id))
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
@@ -510,7 +505,7 @@ pub async fn get_reach_this_data(
     if data_types.iter().any(|s| s == "USER_STATS") {
         let user_entries = ugc_entries::Entity::find()
             .filter(ugc_entries::Column::UserId.eq(persona_id))
-            .filter(ugc_entries::Column::UgcId.is_in(requested_ids.clone()))
+            .filter(ugc_entries::Column::UgcId.is_in(requested_ids.iter().copied()))
             .filter(ugc_entries::Column::EntryType.eq(UgcEntryType::ReachThis))
             .all(db)
             .await?;
@@ -523,7 +518,7 @@ pub async fn get_reach_this_data(
             .select_only()
             .column(ugc_entries::Column::UgcId)
             .column_as(ugc_entries::Column::Id.count(), "count")
-            .filter(ugc_entries::Column::UgcId.is_in(requested_ids.clone()))
+            .filter(ugc_entries::Column::UgcId.is_in(requested_ids.iter().copied()))
             .filter(ugc_entries::Column::EntryType.eq(UgcEntryType::ReachThis))
             .group_by(ugc_entries::Column::UgcId)
             .into_model::<UgcCountResult>()
@@ -591,7 +586,7 @@ pub async fn get_reach_this_data(
     let mut meta_map = HashMap::new();
     if data_types.iter().any(|s| s == "META") {
         let ugc_rows = ugc::Entity::find()
-            .filter(ugc::Column::Id.is_in(requested_ids.clone()))
+            .filter(ugc::Column::Id.is_in(requested_ids.iter().copied()))
             .find_also_related(users::Entity)
             .all(db)
             .await?;
@@ -607,7 +602,8 @@ pub async fn get_reach_this_data(
     }
 
     for ugc_id in ugc_ids {
-        let uid = Uuid::from_str(&ugc_id).unwrap_or_default();
+        let uid = Uuid::from_str(&ugc_id)
+            .map_err(|e| GatewayError::invalid_params(format!("invalid UGC UUID: {e}")))?;
 
         let meta = meta_map.remove(&uid);
 
@@ -664,7 +660,7 @@ pub async fn get_time_trial_data(
     if data_types.iter().any(|s| s == "USER_STATS") {
         let user_entries = ugc_entries::Entity::find()
             .filter(ugc_entries::Column::UserId.eq(persona_id))
-            .filter(ugc_entries::Column::UgcId.is_in(requested_ids.clone()))
+            .filter(ugc_entries::Column::UgcId.is_in(requested_ids.iter().copied()))
             .filter(ugc_entries::Column::EntryType.eq(UgcEntryType::TimeTrial))
             .all(db)
             .await?;
@@ -677,7 +673,7 @@ pub async fn get_time_trial_data(
             .select_only()
             .column(ugc_entries::Column::UgcId)
             .column_as(ugc_entries::Column::Id.count(), "count")
-            .filter(ugc_entries::Column::UgcId.is_in(requested_ids.clone()))
+            .filter(ugc_entries::Column::UgcId.is_in(requested_ids.iter().copied()))
             .filter(ugc_entries::Column::EntryType.eq(UgcEntryType::TimeTrial))
             .group_by(ugc_entries::Column::UgcId)
             .into_model::<UgcCountResult>()
@@ -745,7 +741,7 @@ pub async fn get_time_trial_data(
     let mut meta_map = HashMap::new();
     if data_types.iter().any(|s| s == "META") {
         let ugc_rows = ugc::Entity::find()
-            .filter(ugc::Column::Id.is_in(requested_ids.clone()))
+            .filter(ugc::Column::Id.is_in(requested_ids.iter().copied()))
             .find_also_related(users::Entity)
             .all(db)
             .await?;
@@ -761,7 +757,8 @@ pub async fn get_time_trial_data(
     }
 
     for ugc_id in ugc_ids {
-        let uid = Uuid::from_str(&ugc_id).unwrap_or_default();
+        let uid = Uuid::from_str(&ugc_id)
+            .map_err(|e| GatewayError::invalid_params(format!("invalid UGC UUID: {e}")))?;
 
         let meta = meta_map.remove(&uid);
 
