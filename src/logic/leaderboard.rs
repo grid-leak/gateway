@@ -115,18 +115,21 @@ fn base_ugc_query(ugc_uuid: Uuid, entry_type: UgcEntryType) -> Select<ugc_entrie
 
 macro_rules! paginate_leaderboard {
     ($db:expr, $base_query:expr, $score_col:expr, $score_order:expr, $offset:expr, $count:expr) => {{
+        let offset = $offset.max(0);
+        let count = $count.max(0);
+
         let global_count = $base_query.clone().count($db).await? as i64;
 
         let page_entries = $base_query
             .clone()
             .order_by($score_col, $score_order.clone())
-            .offset($offset as u64)
-            .limit($count as u64)
+            .offset(offset as u64)
+            .limit(count as u64)
             .find_also_related(users::Entity)
             .all($db)
             .await?;
 
-        let global_leader = if $offset == 0 {
+        let global_leader = if offset == 0 {
             global_leader_from_page(&page_entries)
         } else {
             $base_query
@@ -141,7 +144,7 @@ macro_rules! paginate_leaderboard {
                 })
         };
 
-        let users_list = build_users_list(&page_entries, $offset);
+        let users_list = build_users_list(&page_entries, offset);
 
         Ok(build_paginated_response(
             users_list,
@@ -186,7 +189,7 @@ macro_rules! overview_leaderboard {
         };
 
         let total_count = $base_query.clone().count($db).await? as i64;
-        let window_start = (user_rank - 1).saturating_sub(radius);
+        let window_start = (user_rank - 1).saturating_sub(radius).max(0);
 
         let page_entries = $base_query
             .clone()
