@@ -89,8 +89,6 @@ where
     }
 
     fn call(&mut self, req: Request<HttpBody>) -> Self::Future {
-
-
         if req.uri().path().starts_with("/checkpoints/") {
             let ctx = self.ctx.clone();
             return Box::pin(async move { Ok(handle_time_trial(req, ctx).await) });

@@ -51,7 +51,10 @@ async fn handle_upload(req: Request<HttpBody>, ctx: Arc<GatewayContext>) -> BoxR
     let ticket_uuid = Uuid::new_v4();
     let s3_key = format!("tickets/{}", ticket_uuid);
 
-    let body_bytes = match Limited::new(req.into_body(), MAX_UPLOAD_BYTES as usize).collect().await {
+    let body_bytes = match Limited::new(req.into_body(), MAX_UPLOAD_BYTES as usize)
+        .collect()
+        .await
+    {
         Ok(collected) => collected.to_bytes(),
         Err(_) => return text_response(StatusCode::PAYLOAD_TOO_LARGE, "Payload Too Large"),
     };

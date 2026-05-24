@@ -66,9 +66,8 @@ pub fn ugc_to_meta(model: ugc::Model, author_name: &str, flags: &UgcFlags) -> Ug
             (Some(pos), None, None)
         }
         UgcType::TimeTrial => {
-            let base_url = UGC_BASE_URL.get_or_init(|| {
-                env::var("UGC_BASE_URL").expect("UGC_BASE_URL must be set")
-            });
+            let base_url = UGC_BASE_URL
+                .get_or_init(|| env::var("UGC_BASE_URL").expect("UGC_BASE_URL must be set"));
             let url = format!("{}/{}", base_url, model.id);
             (None, Some(transform.clone()), Some(url))
         }

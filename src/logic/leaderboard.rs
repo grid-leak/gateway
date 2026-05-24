@@ -12,7 +12,8 @@ use entities::{
     users,
 };
 use sea_orm::{
-    ColumnTrait, EntityTrait, Order, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Select, Related,
+    ColumnTrait, EntityTrait, Order, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Related,
+    Select,
 };
 use std::str::FromStr;
 use uuid::Uuid;
@@ -157,8 +158,7 @@ where
             .one(db)
             .await?
             .and_then(|(entry, user_opt)| {
-                user_opt
-                    .map(|user| user_to_leaderboard_entry(&user, 1, 1, entry.score_display()))
+                user_opt.map(|user| user_to_leaderboard_entry(&user, 1, 1, entry.score_display()))
             })
     };
 
@@ -239,8 +239,7 @@ where
             .one(db)
             .await?
             .and_then(|(entry, user_opt)| {
-                user_opt
-                    .map(|user| user_to_leaderboard_entry(&user, 1, 1, entry.score_display()))
+                user_opt.map(|user| user_to_leaderboard_entry(&user, 1, 1, entry.score_display()))
             })
     };
 

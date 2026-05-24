@@ -95,6 +95,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // The context will be shared between the RPC methods and the RPC middleware
     let context = Arc::new(GatewayContext::new(db.clone()));
 
+    // Spawn a background task to purge expired sessions
+    let session_cleanup_ctx = context.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+            tracing::info!("Purging expired sessions");
+            session_cleanup_ctx.purge_expired_sessions();
+        }
+    });
+
     let service_builder = tower::ServiceBuilder::new()
         .layer(UploadRouteLayer {
             ctx: context.clone(),

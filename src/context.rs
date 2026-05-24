@@ -43,13 +43,16 @@ impl GatewayContext {
 
     pub fn get_persona_id(&self, session_id: &str) -> Option<i32> {
         let mut sessions = self.sessions.lock().unwrap();
-        if let Some(session) = sessions.get(session_id)
-            && session.created_at.elapsed() < SESSION_LIFETIME
-        {
-            return Some(session.persona_id);
+        if let Some(session) = sessions.get(session_id) {
+            if session.created_at.elapsed() < SESSION_LIFETIME {
+                Some(session.persona_id)
+            } else {
+                sessions.remove(session_id);
+                None
+            }
+        } else {
+            None
         }
-        sessions.remove(session_id);
-        None
     }
 
     pub async fn user(&self, persona_id: i32) -> Result<users::Model, GatewayError> {
@@ -57,5 +60,10 @@ impl GatewayContext {
             .one(&self.db)
             .await?
             .ok_or_else(|| GatewayError::internal("user not found"))
+    }
+
+    pub fn purge_expired_sessions(&self) {
+        let mut sessions = self.sessions.lock().unwrap();
+        sessions.retain(|_, session| session.created_at.elapsed() < SESSION_LIFETIME);
     }
 }
