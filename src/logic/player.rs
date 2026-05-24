@@ -8,8 +8,8 @@ use crate::{
         ChallengeEntry, Division, Entry, PlayerInfo, PlayerUgcLimits, UgcEntry, UgcId,
     },
 };
-use entities::{challenge_entries, ugc, ugc_entries, users, users::Entity as Users};
 use chrono::Utc;
+use entities::{challenge_entries, ugc, ugc_entries, users, users::Entity as Users};
 use sea_orm::prelude::Expr;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set,
@@ -112,10 +112,7 @@ pub async fn get_latest_played(
 
     enum Fetched {
         Challenge(entities::challenge_entries::Model),
-        Ugc(
-            entities::ugc_entries::Model,
-            Option<entities::ugc::Model>,
-        ),
+        Ugc(entities::ugc_entries::Model, Option<entities::ugc::Model>),
     }
 
     let mut combined: Vec<(chrono::DateTime<chrono::Utc>, Fetched)> = Vec::new();
@@ -127,7 +124,7 @@ pub async fn get_latest_played(
     }
 
     // TODO: Only include specific Hackable Billboards that show up on the map
-    combined.sort_by(|a, b| b.0.cmp(&a.0));
+    combined.sort_by_key(|b| std::cmp::Reverse(b.0));
     combined.truncate(20);
 
     let mut results = Vec::new();

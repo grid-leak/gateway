@@ -61,16 +61,8 @@ where
         mut request: jsonrpsee::types::Request<'a>,
     ) -> impl Future<Output = Self::MethodResponse> + Send + 'a {
         let method = request.method_name();
-        let pretty_params = request
-            .params
-            .as_ref()
-            .and_then(|p| serde_json::from_str::<serde_json::Value>(p.get()).ok())
-            .and_then(|json| serde_json::to_string_pretty(&json).ok());
 
-        match pretty_params {
-            Some(pretty) => println!("{method}\n{pretty}"),
-            None => println!("{method}"),
-        }
+        tracing::info!(method = method, "RPC call received");
 
         if request.method_name().starts_with("PamplonaAuthenticated") {
             let session_type = request

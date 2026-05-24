@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use http_body_util::BodyExt;
+use http_body_util::{BodyExt, Limited};
 use hyper::{Request, Response, StatusCode, header};
 use jsonrpsee::server::HttpBody;
 use std::future::Future;
@@ -51,9 +51,9 @@ async fn handle_upload(req: Request<HttpBody>, ctx: Arc<GatewayContext>) -> BoxR
     let ticket_uuid = Uuid::new_v4();
     let s3_key = format!("tickets/{}", ticket_uuid);
 
-    let body_bytes = match req.into_body().collect().await {
+    let body_bytes = match Limited::new(req.into_body(), MAX_UPLOAD_BYTES as usize).collect().await {
         Ok(collected) => collected.to_bytes(),
-        Err(_) => return text_response(StatusCode::BAD_REQUEST, "Bad Request Body"),
+        Err(_) => return text_response(StatusCode::PAYLOAD_TOO_LARGE, "Payload Too Large"),
     };
 
     let body_stream = aws_sdk_s3::primitives::ByteStream::from(body_bytes);

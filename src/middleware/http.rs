@@ -82,8 +82,11 @@ fn decrypt_payload(encrypted_data: &[u8], session_id: &str) -> Result<Vec<u8>, S
 }
 
 fn parse_session(headers: &HeaderMap<HeaderValue>) -> SessionType {
-    match headers.get(GATEWAY_SESSION_HEADER).cloned() {
-        Some(session) => SessionType::Identified(session.to_str().unwrap().to_string()),
+    match headers.get(GATEWAY_SESSION_HEADER) {
+        Some(session) => match session.to_str() {
+            Ok(s) => SessionType::Identified(s.to_string()),
+            Err(_) => SessionType::Unknown,
+        },
         None => SessionType::Unknown,
     }
 }
@@ -169,11 +172,18 @@ where
                     }
                 };
 
-                println!("found session_id={session_id}");
+                tracing::debug!(session_id = %session_id, "Decrypting encrypted payload");
 
-                // Decrypt the payload
-                match decrypt_payload(&body_bytes, &session_id) {
-                    Ok(decrypted) => {
+                // Offload symmetric decryption to blocking thread pool to avoid blocking async executor
+                let body_bytes_clone = body_bytes.clone();
+                let session_id_clone = session_id.clone();
+                let decrypt_res = tokio::task::spawn_blocking(move || {
+                    decrypt_payload(&body_bytes_clone, &session_id_clone)
+                })
+                .await;
+
+                match decrypt_res {
+                    Ok(Ok(decrypted)) => {
                         // Update content-type to application/json
                         // so jsonrpsee can properly handle it
                         parts
@@ -188,8 +198,8 @@ where
 
                         Bytes::from(decrypted)
                     }
-                    Err(_) => {
-                        // Return original body on decryption failure
+                    _ => {
+                        // Return original body on decryption failure or thread join error
                         body_bytes
                     }
                 }

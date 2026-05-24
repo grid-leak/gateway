@@ -89,11 +89,7 @@ where
     }
 
     fn call(&mut self, req: Request<HttpBody>) -> Self::Future {
-        println!("HTTP {} {}", req.method(), req.uri().path());
 
-        for (key, value) in req.headers() {
-            println!("{}: {:?}", key, value);
-        }
 
         if req.uri().path().starts_with("/checkpoints/") {
             let ctx = self.ctx.clone();

@@ -84,7 +84,8 @@ impl From<GatewayError> for ErrorObjectOwned {
 
 impl From<sea_orm::DbErr> for GatewayError {
     fn from(e: sea_orm::DbErr) -> Self {
-        GatewayError::internal(e.to_string())
+        tracing::error!("Database error: {:?}", e);
+        GatewayError::internal("Internal database error")
     }
 }
 

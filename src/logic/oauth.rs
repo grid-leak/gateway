@@ -1,7 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 use crate::logic::GatewayError;
+
+static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
 #[derive(Debug, Deserialize)]
 pub struct DiscordUser {
@@ -22,7 +25,7 @@ pub struct OAuth2MeResponse {
 }
 
 pub async fn fetch_discord_user(access_token: &str) -> Result<DiscordUser, GatewayError> {
-    let client = reqwest::Client::new();
+    let client = CLIENT.get_or_init(reqwest::Client::new);
 
     let response = client
         .get("https://discord.com/api/oauth2/@me")

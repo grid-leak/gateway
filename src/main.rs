@@ -57,9 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let db = Database::connect(env::var("DATABASE_URL").expect("DATABASE_URL must be set")).await?;
 
     // Synchronize database schema with entity definitions
-    db.get_schema_registry("entities::*")
-        .sync(&db)
-        .await?;
+    db.get_schema_registry("entities::*").sync(&db).await?;
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
 

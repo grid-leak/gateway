@@ -1,10 +1,13 @@
 use crate::{
     context::GatewayContext,
-    logic::{GatewayError, game_data::{load_ugc_flags, ugc_to_meta, ugc_type_to_string}},
+    logic::{
+        GatewayError,
+        game_data::{load_ugc_flags, ugc_to_meta, ugc_type_to_string},
+    },
     models::game_data::{Bookmarks, ChallengeBookmarkEntry, UgcBookmarkEntry},
 };
-use entities::{challenge_bookmarks, ugc, ugc_bookmarks, users};
 use chrono::Utc;
+use entities::{challenge_bookmarks, ugc, ugc_bookmarks, users};
 use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter, Set, sea_query::OnConflict};
 use uuid::Uuid;
 
