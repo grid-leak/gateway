@@ -139,17 +139,17 @@ impl From<PersonaId> for i32 {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Transform {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub qx: Option<f64>,
+    pub qx: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub qy: Option<f64>,
+    pub qy: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub qz: Option<f64>,
+    pub qz: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub qw: Option<f64>,
+    pub qw: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
