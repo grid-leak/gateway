@@ -12,22 +12,29 @@ use entities::{
     users,
 };
 use sea_orm::{
-    ColumnTrait, EntityTrait, Order, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Select,
+    ColumnTrait, EntityTrait, Order, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Select, Related,
 };
 use std::str::FromStr;
 use uuid::Uuid;
 
 trait HasScore {
+    fn score(&self) -> i64;
     fn score_display(&self) -> String;
 }
 
 impl HasScore for challenge_entries::Model {
+    fn score(&self) -> i64 {
+        self.score
+    }
     fn score_display(&self) -> String {
         self.score.to_string()
     }
 }
 
 impl HasScore for ugc_entries::Model {
+    fn score(&self) -> i64 {
+        self.score
+    }
     fn score_display(&self) -> String {
         self.score.to_string()
     }
@@ -113,129 +120,150 @@ fn base_ugc_query(ugc_uuid: Uuid, entry_type: UgcEntryType) -> Select<ugc_entrie
         .filter(ugc_entries::Column::EntryType.eq(entry_type))
 }
 
-macro_rules! paginate_leaderboard {
-    ($db:expr, $base_query:expr, $score_col:expr, $score_order:expr, $offset:expr, $count:expr) => {{
-        let offset = $offset.max(0);
-        let count = $count.max(0);
+async fn execute_leaderboard_pagination<E>(
+    db: &sea_orm::DatabaseConnection,
+    base_query: Select<E>,
+    score_col: E::Column,
+    score_order: Order,
+    offset: i64,
+    count: i64,
+) -> Result<LeaderboardResponse, GatewayError>
+where
+    E: EntityTrait + Related<users::Entity>,
+    E::Model: HasScore + sea_orm::FromQueryResult + Sized + Send + Sync + 'static,
+{
+    let offset = offset.max(0);
+    let count = count.max(0);
 
-        let global_count = $base_query.clone().count($db).await? as i64;
+    let global_count = base_query.clone().count(db).await? as i64;
 
-        let page_entries = $base_query
+    let page_entries = base_query
+        .clone()
+        .order_by(score_col, score_order.clone())
+        .offset(offset as u64)
+        .limit(count as u64)
+        .find_also_related(users::Entity)
+        .all(db)
+        .await?;
+
+    let global_leader = if offset == 0 {
+        global_leader_from_page(&page_entries)
+    } else {
+        base_query
             .clone()
-            .order_by($score_col, $score_order.clone())
-            .offset(offset as u64)
-            .limit(count as u64)
+            .order_by(score_col, score_order.clone())
             .find_also_related(users::Entity)
-            .all($db)
-            .await?;
+            .limit(1)
+            .one(db)
+            .await?
+            .and_then(|(entry, user_opt)| {
+                user_opt
+                    .map(|user| user_to_leaderboard_entry(&user, 1, 1, entry.score_display()))
+            })
+    };
 
-        let global_leader = if offset == 0 {
-            global_leader_from_page(&page_entries)
-        } else {
-            $base_query
-                .clone()
-                .order_by($score_col, $score_order.clone())
-                .find_also_related(users::Entity)
-                .one($db)
-                .await?
-                .and_then(|(entry, user_opt)| {
-                    user_opt
-                        .map(|user| user_to_leaderboard_entry(&user, 1, 1, entry.score_display()))
-                })
-        };
+    let users_list = build_users_list(&page_entries, offset);
 
-        let users_list = build_users_list(&page_entries, offset);
-
-        Ok(build_paginated_response(
-            users_list,
-            global_leader,
-            global_count,
-        ))
-    }};
+    Ok(build_paginated_response(
+        users_list,
+        global_leader,
+        global_count,
+    ))
 }
 
-macro_rules! overview_leaderboard {
-    ($db:expr, $base_query:expr, $score_col:expr, $user_id_col:expr, $score_order:expr, $persona_id:expr, $radius:expr) => {{
-        let radius = $radius.max(0) as i64;
+async fn execute_overview_leaderboard<E>(
+    db: &sea_orm::DatabaseConnection,
+    base_query: Select<E>,
+    score_col: E::Column,
+    user_id_col: E::Column,
+    score_order: Order,
+    persona_id: i32,
+    radius: i32,
+) -> Result<OverviewLeaderboardResponse, GatewayError>
+where
+    E: EntityTrait + Related<users::Entity>,
+    E::Model: HasScore + sea_orm::FromQueryResult + Sized + Send + Sync + 'static,
+{
+    let radius = radius.max(0) as i64;
 
-        let user_entry = $base_query
-            .clone()
-            .filter($user_id_col.eq($persona_id))
-            .find_also_related(users::Entity)
-            .one($db)
-            .await?;
+    let user_entry = base_query
+        .clone()
+        .filter(user_id_col.eq(persona_id))
+        .find_also_related(users::Entity)
+        .one(db)
+        .await?;
 
-        let user_rank: i64 = if let Some((ref entry, _)) = user_entry {
-            let better = match $score_order {
-                Order::Asc => {
-                    $base_query
-                        .clone()
-                        .filter($score_col.lt(entry.score))
-                        .count($db)
-                        .await?
-                }
-                Order::Desc => {
-                    $base_query
-                        .clone()
-                        .filter($score_col.gt(entry.score))
-                        .count($db)
-                        .await?
-                }
-                _ => 0,
-            };
-            better as i64 + 1
-        } else {
-            1
+    let user_rank: i64 = if let Some((ref entry, _)) = user_entry {
+        let better = match score_order {
+            Order::Asc => {
+                base_query
+                    .clone()
+                    .filter(score_col.lt(entry.score()))
+                    .count(db)
+                    .await?
+            }
+            Order::Desc => {
+                base_query
+                    .clone()
+                    .filter(score_col.gt(entry.score()))
+                    .count(db)
+                    .await?
+            }
+            _ => 0,
         };
+        better as i64 + 1
+    } else {
+        1
+    };
 
-        let total_count = $base_query.clone().count($db).await? as i64;
-        let window_start = (user_rank - 1).saturating_sub(radius).max(0);
+    let total_count = base_query.clone().count(db).await? as i64;
+    let window_start = (user_rank - 1).saturating_sub(radius).max(0);
 
-        let page_entries = $base_query
+    let page_entries = base_query
+        .clone()
+        .order_by(score_col, score_order.clone())
+        .offset(window_start as u64)
+        .limit((radius * 2 + 1) as u64)
+        .find_also_related(users::Entity)
+        .all(db)
+        .await?;
+
+    let global_leader = if window_start == 0 {
+        global_leader_from_page(&page_entries)
+    } else {
+        base_query
             .clone()
-            .order_by($score_col, $score_order.clone())
-            .offset(window_start as u64)
-            .limit((radius * 2 + 1) as u64)
+            .order_by(score_col, score_order.clone())
             .find_also_related(users::Entity)
-            .all($db)
-            .await?;
-
-        let global_leader = if window_start == 0 {
-            global_leader_from_page(&page_entries)
-        } else {
-            $base_query
-                .clone()
-                .order_by($score_col, $score_order.clone())
-                .find_also_related(users::Entity)
-                .one($db)
-                .await?
-                .and_then(|(entry, user_opt)| {
-                    user_opt
-                        .map(|user| user_to_leaderboard_entry(&user, 1, 1, entry.score_display()))
-                })
-        };
-
-        let users_list: Vec<LeaderboardUser> = page_entries
-            .iter()
-            .enumerate()
-            .filter_map(|(i, (entry, user_opt))| {
-                user_opt.as_ref().map(|user| {
-                    let global_rank = window_start as i32 + i as i32 + 1;
-                    let position = i as i32 + 1;
-                    user_to_leaderboard_entry(user, position, global_rank, entry.score_display())
-                })
+            .limit(1)
+            .one(db)
+            .await?
+            .and_then(|(entry, user_opt)| {
+                user_opt
+                    .map(|user| user_to_leaderboard_entry(&user, 1, 1, entry.score_display()))
             })
-            .collect();
+    };
 
-        Ok(OverviewLeaderboardResponse {
-            leaderboard: LeaderboardWrapper {
-                area: None,
-                total_count,
-                users: users_list,
-            },
-            global_leader,
+    let users_list: Vec<LeaderboardUser> = page_entries
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (entry, user_opt))| {
+            user_opt.as_ref().map(|user| {
+                let global_rank = window_start as i32 + i as i32 + 1;
+                let position = i as i32 + 1;
+                user_to_leaderboard_entry(user, position, global_rank, entry.score_display())
+            })
         })
-    }};
+        .collect();
+
+    Ok(OverviewLeaderboardResponse {
+        leaderboard: LeaderboardWrapper {
+            area: None,
+            total_count,
+            users: users_list,
+        },
+        global_leader,
+    })
 }
 
 pub async fn get_overview_ugc_leaderboard(
@@ -249,15 +277,16 @@ pub async fn get_overview_ugc_leaderboard(
     let ugc_uuid = Uuid::from_str(&ugc_uuid)
         .map_err(|e| GatewayError::invalid_params(format!("invalid UGC UUID: {e}")))?;
 
-    overview_leaderboard!(
+    execute_overview_leaderboard(
         ctx.db(),
         base_ugc_query(ugc_uuid, entry_type),
         ugc_entries::Column::Score,
         ugc_entries::Column::UserId,
         score_order,
         persona_id,
-        radius
+        radius,
     )
+    .await
 }
 
 pub async fn get_overview_challenge_leaderboard(
@@ -268,15 +297,16 @@ pub async fn get_overview_challenge_leaderboard(
     score_order: Order,
     radius: i32,
 ) -> Result<OverviewLeaderboardResponse, GatewayError> {
-    overview_leaderboard!(
+    execute_overview_leaderboard(
         ctx.db(),
         base_challenge_query(&challenge_id, entry_type),
         challenge_entries::Column::Score,
         challenge_entries::Column::UserId,
         score_order,
         persona_id,
-        radius
+        radius,
     )
+    .await
 }
 
 pub async fn get_challenge_leaderboard(
@@ -288,14 +318,15 @@ pub async fn get_challenge_leaderboard(
     offset: i64,
     count: i64,
 ) -> Result<LeaderboardResponse, GatewayError> {
-    paginate_leaderboard!(
+    execute_leaderboard_pagination(
         ctx.db(),
         base_challenge_query(&challenge_id, entry_type),
         challenge_entries::Column::Score,
         score_order,
         offset,
-        count
+        count,
     )
+    .await
 }
 
 pub async fn get_challenge_friends_leaderboard(
@@ -308,14 +339,15 @@ pub async fn get_challenge_friends_leaderboard(
     count: i64,
 ) -> Result<LeaderboardResponse, GatewayError> {
     // TODO: filter by friends when the friends system is implemented
-    paginate_leaderboard!(
+    execute_leaderboard_pagination(
         ctx.db(),
         base_challenge_query(&challenge_id, entry_type),
         challenge_entries::Column::Score,
         score_order,
         offset,
-        count
+        count,
     )
+    .await
 }
 
 pub async fn get_ugc_leaderboard(
@@ -330,14 +362,15 @@ pub async fn get_ugc_leaderboard(
     let ugc_uuid = Uuid::from_str(&ugc_id)
         .map_err(|e| GatewayError::invalid_params(format!("invalid UGC UUID: {e}")))?;
 
-    paginate_leaderboard!(
+    execute_leaderboard_pagination(
         ctx.db(),
         base_ugc_query(ugc_uuid, entry_type),
         ugc_entries::Column::Score,
         score_order,
         offset,
-        count
+        count,
     )
+    .await
 }
 
 pub async fn get_ugc_friends_leaderboard(
@@ -353,12 +386,13 @@ pub async fn get_ugc_friends_leaderboard(
     let ugc_uuid = Uuid::from_str(&ugc_id)
         .map_err(|e| GatewayError::invalid_params(format!("invalid UGC UUID: {e}")))?;
 
-    paginate_leaderboard!(
+    execute_leaderboard_pagination(
         ctx.db(),
         base_ugc_query(ugc_uuid, entry_type),
         ugc_entries::Column::Score,
         score_order,
         offset,
-        count
+        count,
     )
+    .await
 }

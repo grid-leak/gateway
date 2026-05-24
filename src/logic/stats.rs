@@ -794,7 +794,7 @@ fn merge_stats(
         .ok_or_else(|| GatewayError::internal("stats is not a JSON object"))?;
 
     for (key, value) in updates {
-        if !VALID_STATS_KEYS.contains(&key.as_str()) {
+        if VALID_STATS_KEYS.binary_search(&key.as_str()).is_err() {
             return Err(GatewayError::internal(format!("invalid stat key: {key}")));
         }
 

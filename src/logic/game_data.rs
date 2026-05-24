@@ -9,7 +9,10 @@ use entities::{
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use std::collections::HashMap;
 use std::env;
+use std::sync::OnceLock;
 use uuid::Uuid;
+
+static UGC_BASE_URL: OnceLock<String> = OnceLock::new();
 
 pub fn ugc_type_to_string(t: &UgcType) -> String {
     match t {
@@ -63,7 +66,9 @@ pub fn ugc_to_meta(model: ugc::Model, author_name: &str, flags: &UgcFlags) -> Ug
             (Some(pos), None, None)
         }
         UgcType::TimeTrial => {
-            let base_url = env::var("UGC_BASE_URL").expect("UGC_BASE_URL must be set");
+            let base_url = UGC_BASE_URL.get_or_init(|| {
+                env::var("UGC_BASE_URL").expect("UGC_BASE_URL must be set")
+            });
             let url = format!("{}/{}", base_url, model.id);
             (None, Some(transform.clone()), Some(url))
         }
