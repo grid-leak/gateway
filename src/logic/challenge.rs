@@ -457,11 +457,26 @@ pub async fn finish_runners_route(
     let db = ctx.db();
     let now = chrono::Utc::now();
 
+    let prefix = challenge_id.strip_suffix("time").unwrap_or(&challenge_id);
+    let allowed_keys = [
+        format!("{}walk_distance", prefix),
+        format!("{}wallrun_distance", prefix),
+        format!("{}total_distance", prefix),
+        format!("{}maxperframe_distance", prefix),
+    ];
+
     let extra_stats_map: HashMap<String, String> = extra_stats
         .as_object()
         .map(|obj| {
             obj.iter()
-                .map(|(k, v)| (k.clone(), v.to_string()))
+                .filter(|(k, _)| allowed_keys.iter().any(|ak| ak == *k))
+                .map(|(k, v)| {
+                    let val_str = match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        _ => v.to_string(),
+                    };
+                    (k.clone(), val_str)
+                })
                 .collect()
         })
         .unwrap_or_default();

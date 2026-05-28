@@ -462,8 +462,28 @@ pub async fn finish_time_trial(
                     GatewayError::internal("failed to process replay upload")
                 })?;
 
-            let extra_stats_map: HashMap<String, String> =
-                serde_json::from_value(extra_stats).unwrap_or_default();
+            let allowed_keys = [
+                "total_distance",
+                "walk_distance",
+                "maxperframe_distance",
+                "wallrun_distance",
+            ];
+
+            let extra_stats_map: HashMap<String, String> = extra_stats
+                .as_object()
+                .map(|obj| {
+                    obj.iter()
+                        .filter(|(k, _)| allowed_keys.contains(&k.as_str()))
+                        .map(|(k, v)| {
+                            let val_str = match v {
+                                serde_json::Value::String(s) => s.clone(),
+                                _ => v.to_string(),
+                            };
+                            (k.clone(), val_str)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
 
             let metadata = UgcEntryUserStats::TimeTrial(TimeTrialUserStats {
                 finished_at: now.timestamp_millis().to_string(),
