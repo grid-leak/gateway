@@ -6,7 +6,7 @@ use crate::{
         game_data::{
             Bookmarks, Division, Entry, HackableBillboardLeader, InitialGameDataResponse,
             Inventory, Item, Kit, LeaderboardResponse, OverviewLeaderboardResponse,
-            PlayerUgcLimits, RunnersRouteData, UgcId, UgcMeta,
+            PlayerUgcLimits, PlayerUgcResponse, RunnersRouteData, UgcId, UgcMeta,
         },
         ugc::{CreateReachThisMeta, CreateTimeTrialMeta},
     },
@@ -30,6 +30,9 @@ pub trait PamplonaAuthenticated {
         &self,
         level_ids: Vec<i64>,
     ) -> RpcResult<InitialGameDataResponse>;
+
+    #[method(name = "getPlayerUGC", with_extensions)]
+    async fn get_player_ugc(&self) -> RpcResult<PlayerUgcResponse>;
 
     #[method(name = "getInventory", with_extensions)]
     async fn get_inventory(&self) -> RpcResult<Inventory>;
@@ -247,6 +250,13 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
     ) -> RpcResult<InitialGameDataResponse> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::ugc::get_initial_game_data(&self.ctx, level_ids[0], persona_id)
+            .await
+            .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_player_ugc(&self, extensions: &Extensions) -> RpcResult<PlayerUgcResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::ugc::get_player_ugc(&self.ctx, persona_id)
             .await
             .map_err(GatewayError::into_rpc_err)
     }

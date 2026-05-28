@@ -7,8 +7,8 @@ use crate::{
     models::{
         game_data::{
             Bookmarks, ChallengeBookmarkEntry, Division, InitialGameDataResponse, Inventory,
-            LEVEL_ID_HASH, PlayerInfo, PromotedUgcWrapper, ReachThisWrapper, TimeTrialWrapper,
-            UgcBookmarkEntry, UgcMeta, UgcWrapper, UserRank,
+            LEVEL_ID_HASH, PlayerInfo, PlayerUgcResponse, PromotedUgcWrapper, ReachThisWrapper,
+            TimeTrialWrapper, UgcBookmarkEntry, UgcMeta, UgcWrapper, UserRank,
         },
         ugc::{CreateReachThisMeta, CreateTimeTrialMeta},
         user_stats::{ReachThisUserStats, TimeTrialUserStats, UgcEntryUserStats},
@@ -35,6 +35,25 @@ use uuid::Uuid;
 
 const UGC_LIMIT: u64 = 300;
 
+fn map_ugc_to_wrapper(
+    raw_ugc: Vec<(ugc::Model, Option<users::Model>)>,
+    flags_map: &HashMap<Uuid, UgcFlags>,
+) -> Vec<UgcWrapper> {
+    raw_ugc
+        .into_iter()
+        .map(|(entry, author_opt)| {
+            let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
+            let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
+            UgcWrapper {
+                meta: ugc_to_meta(entry, author_name, &flags),
+                stats: None,
+                user_stats: None,
+                user_rank: None,
+            }
+        })
+        .collect()
+}
+
 pub async fn get_initial_game_data(
     ctx: &GatewayContext,
     level_id: i64,
@@ -45,14 +64,8 @@ pub async fn get_initial_game_data(
 
     let user = ctx.user(persona_id).await?;
 
-    let reach_this_query = ugc::Entity::find()
+    let player_ugc_query = ugc::Entity::find()
         .filter(ugc::Column::AuthorId.eq(persona_id))
-        .filter(ugc::Column::Type.eq(UgcType::ReachThis))
-        .find_also_related(users::Entity);
-
-    let time_trial_query = ugc::Entity::find()
-        .filter(ugc::Column::AuthorId.eq(persona_id))
-        .filter(ugc::Column::Type.eq(UgcType::TimeTrial))
         .find_also_related(users::Entity);
 
     let random_ugc_query = ugc::Entity::find()
@@ -82,14 +95,25 @@ pub async fn get_initial_game_data(
             })?;
         (vec![], vec![], vec![], vec![], c_bm, inv)
     } else {
-        tokio::try_join!(
-            async { reach_this_query.all(db).await.map_err(GatewayError::from) },
-            async { time_trial_query.all(db).await.map_err(GatewayError::from) },
+        let (player_ugcs, random_ugc_raw, bookmarks_data, challenge_bookmarks, inventory) = tokio::try_join!(
+            async { player_ugc_query.all(db).await.map_err(GatewayError::from) },
             async { random_ugc_query.all(db).await.map_err(GatewayError::from) },
             async { bookmarks_query.all(db).await.map_err(GatewayError::from) },
             async { challenge_bm_query.all(db).await.map_err(GatewayError::from) },
             super::inventory::get_inventory(ctx, persona_id),
-        )?
+        )?;
+
+        let mut reach_this_raw = Vec::new();
+        let mut time_trials_raw = Vec::new();
+
+        for item in player_ugcs {
+            match item.0.r#type {
+                UgcType::ReachThis => reach_this_raw.push(item),
+                UgcType::TimeTrial => time_trials_raw.push(item),
+            }
+        }
+
+        (reach_this_raw, time_trials_raw, random_ugc_raw, bookmarks_data, challenge_bookmarks, inventory)
     };
 
     let mut all_ugc_ids: Vec<Uuid> = reach_this_raw
@@ -108,33 +132,8 @@ pub async fn get_initial_game_data(
 
     let flags_map = load_ugc_flags(db, persona_id, &all_ugc_ids).await?;
 
-    let user_reach_this: Vec<UgcWrapper> = reach_this_raw
-        .into_iter()
-        .map(|(entry, author_opt)| {
-            let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
-            let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
-            UgcWrapper {
-                meta: ugc_to_meta(entry, author_name, &flags),
-                stats: None,
-                user_stats: None,
-                user_rank: None,
-            }
-        })
-        .collect();
-
-    let user_time_trials: Vec<UgcWrapper> = time_trials_raw
-        .into_iter()
-        .map(|(entry, author_opt)| {
-            let author_name = author_opt.as_ref().map(|u| u.name.as_str()).unwrap_or("");
-            let flags = flags_map.get(&entry.id).cloned().unwrap_or_default();
-            UgcWrapper {
-                meta: ugc_to_meta(entry, author_name, &flags),
-                stats: None,
-                user_stats: None,
-                user_rank: None,
-            }
-        })
-        .collect();
+    let user_reach_this = map_ugc_to_wrapper(reach_this_raw, &flags_map);
+    let user_time_trials = map_ugc_to_wrapper(time_trials_raw, &flags_map);
 
     let mut promoted_ugc = Vec::with_capacity(random_ugc_raw.len());
     let mut seen_ids = HashSet::new();
@@ -213,6 +212,45 @@ pub async fn get_initial_game_data(
             challenge_bookmarks: challenge_bookmarks_list,
         },
         inventory,
+    })
+}
+
+pub async fn get_player_ugc(
+    ctx: &GatewayContext,
+    persona_id: i32,
+) -> Result<PlayerUgcResponse, GatewayError> {
+    let db = ctx.db();
+
+    let player_ugcs = ugc::Entity::find()
+        .filter(ugc::Column::AuthorId.eq(persona_id))
+        .find_also_related(users::Entity)
+        .all(db)
+        .await
+        .map_err(GatewayError::from)?;
+
+    let mut reach_this_raw = Vec::new();
+    let mut time_trials_raw = Vec::new();
+
+    for item in player_ugcs {
+        match item.0.r#type {
+            UgcType::ReachThis => reach_this_raw.push(item),
+            UgcType::TimeTrial => time_trials_raw.push(item),
+        }
+    }
+
+    let mut all_ugc_ids: Vec<Uuid> = reach_this_raw
+        .iter()
+        .map(|(ugc, _)| ugc.id)
+        .chain(time_trials_raw.iter().map(|(ugc, _)| ugc.id))
+        .collect();
+    all_ugc_ids.sort_unstable();
+    all_ugc_ids.dedup();
+
+    let flags_map = load_ugc_flags(db, persona_id, &all_ugc_ids).await?;
+
+    Ok(PlayerUgcResponse {
+        player_reach_this: map_ugc_to_wrapper(reach_this_raw, &flags_map),
+        player_time_trials: map_ugc_to_wrapper(time_trials_raw, &flags_map),
     })
 }
 

@@ -10,8 +10,8 @@ use crate::{
     models::{
         customization::{PlayerGhost, PlayerTagResponse, TagData},
         game_data::{
-            Entry, LeaderboardResponse, PersonaId, PlayerInfo, ReachThisWrapper, ReplayUrlResponse,
-            RunnersRouteData, TimeTrialWrapper, UgcId,
+            Entry, LeaderboardResponse, PersonaId, PlayerInfo, PlayerUgcResponse, ReachThisWrapper,
+            ReplayUrlResponse, RunnersRouteData, TimeTrialWrapper, UgcId,
         },
     },
 };
@@ -50,6 +50,9 @@ pub trait Pamplona {
 
     #[method(name = "getPlayerInfo")]
     async fn get_player_info(&self, persona_id: PersonaId) -> RpcResult<PlayerInfo>;
+
+    #[method(name = "getPlayerUGC")]
+    async fn get_player_ugc(&self, persona_id: PersonaId) -> RpcResult<PlayerUgcResponse>;
 
     #[method(name = "getReachThisData")]
     async fn get_reach_this_data(
@@ -181,6 +184,12 @@ impl PamplonaServer for PamplonaImpl {
 
     async fn get_player_info(&self, persona_id: PersonaId) -> RpcResult<PlayerInfo> {
         logic::player::get_player_info(&self.ctx, persona_id.into())
+            .await
+            .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_player_ugc(&self, persona_id: PersonaId) -> RpcResult<PlayerUgcResponse> {
+        logic::ugc::get_player_ugc(&self.ctx, persona_id.into())
             .await
             .map_err(GatewayError::into_rpc_err)
     }

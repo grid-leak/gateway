@@ -37,6 +37,13 @@ pub struct InitialGameDataResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PlayerUgcResponse {
+    pub player_reach_this: Vec<UgcWrapper>,
+    pub player_time_trials: Vec<UgcWrapper>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlayerInfo {
     pub name: String,
     pub location: Vec<Location>,
