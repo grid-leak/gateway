@@ -870,8 +870,8 @@ pub async fn set_ugc_published_flag(
     published: bool,
 ) -> Result<bool, GatewayError> {
     let db = ctx.db();
-    let ugc_uuid = Uuid::from_str(&ugc_id)
-        .map_err(|_| GatewayError::invalid_params("invalid UGC UUID"))?;
+    let ugc_uuid =
+        Uuid::from_str(&ugc_id).map_err(|_| GatewayError::invalid_params("invalid UGC UUID"))?;
 
     let ugc_opt = ugc::Entity::find_by_id(ugc_uuid)
         .one(db)
@@ -908,4 +908,37 @@ pub async fn set_ugc_published_flag(
     }
 
     Ok(published)
+}
+
+pub async fn delete_ugc(
+    ctx: &GatewayContext,
+    persona_id: i32,
+    ugc_id: String,
+) -> Result<(), GatewayError> {
+    let db = ctx.db();
+    let ugc_uuid =
+        Uuid::from_str(&ugc_id).map_err(|_| GatewayError::invalid_params("invalid UGC UUID"))?;
+
+    let ugc_opt = ugc::Entity::find_by_id(ugc_uuid)
+        .one(db)
+        .await
+        .map_err(GatewayError::from)?;
+
+    let Some(ugc_model) = ugc_opt else {
+        return Err(GatewayError::game(GameErrorCode::NotFound, "UGC not found"));
+    };
+
+    if ugc_model.author_id != persona_id {
+        return Err(GatewayError::game(
+            GameErrorCode::UgcNotOwned,
+            "You do not own this UGC",
+        ));
+    }
+
+    ugc::Entity::delete_many()
+        .filter(ugc::Column::Id.eq(ugc_uuid))
+        .exec(db)
+        .await?;
+
+    Ok(())
 }

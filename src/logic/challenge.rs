@@ -355,7 +355,7 @@ pub async fn finish_hackable_billboard(
     challenge_id: String,
     _main_stat: i32,
     _extra_stats: serde_json::Value,
-) -> Result<String, GatewayError> {
+) -> Result<(), GatewayError> {
     let db = ctx.db();
     let now = chrono::Utc::now();
     let timestamp = now.timestamp_millis();
@@ -387,7 +387,7 @@ pub async fn finish_hackable_billboard(
     .exec(db)
     .await?;
 
-    Ok("success".to_string())
+    Ok(())
 }
 
 fn calculate_stars(challenge_id: &str, score: i32) -> u32 {

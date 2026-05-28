@@ -826,7 +826,7 @@ pub async fn update_persona_stats(
     ctx: &GatewayContext,
     persona_id: i32,
     stats: serde_json::Map<String, serde_json::Value>,
-) -> Result<String, GatewayError> {
+) -> Result<(), GatewayError> {
     let db = ctx.db();
 
     let user = ctx.user(persona_id).await?;
@@ -844,5 +844,5 @@ pub async fn update_persona_stats(
 
     active_model.update(db).await?;
 
-    Ok("success".to_string())
+    Ok(())
 }

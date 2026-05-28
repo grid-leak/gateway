@@ -238,6 +238,9 @@ pub trait PamplonaAuthenticated {
         ugc_id: UgcId,
         published: bool,
     ) -> RpcResult<SetUgcPublishedFlagResponse>;
+
+    #[method(name = "deleteUGC", with_extensions)]
+    async fn delete_ugc(&self, ugc_id: UgcId, ugc_type: String) -> RpcResult<String>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -354,7 +357,9 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::stats::update_persona_stats(&self.ctx, persona_id, stats)
             .await
-            .map_err(GatewayError::into_rpc_err)
+            .map_err(GatewayError::into_rpc_err)?;
+
+        Ok("success".to_string())
     }
 
     async fn finish_hackable_billboard(
@@ -838,5 +843,19 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         Ok(SetUgcPublishedFlagResponse {
             published: is_published,
         })
+    }
+
+    async fn delete_ugc(
+        &self,
+        extensions: &Extensions,
+        ugc_id: UgcId,
+        _ugc_type: String,
+    ) -> RpcResult<String> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        logic::ugc::delete_ugc(&self.ctx, persona_id, ugc_id.id)
+            .await
+            .map_err(GatewayError::into_rpc_err)?;
+
+        Ok("success".to_string())
     }
 }
