@@ -12,7 +12,7 @@ use std::env;
 use std::sync::OnceLock;
 use uuid::Uuid;
 
-static UGC_BASE_URL: OnceLock<String> = OnceLock::new();
+pub static UGC_BASE_URL: OnceLock<String> = OnceLock::new();
 
 pub fn ugc_type_to_string(t: &UgcType) -> String {
     match t {

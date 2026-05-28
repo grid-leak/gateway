@@ -268,12 +268,12 @@ where
 pub async fn get_overview_ugc_leaderboard(
     ctx: &GatewayContext,
     persona_id: i32,
-    ugc_uuid: String,
+    ugc_id: String,
     entry_type: UgcEntryType,
     score_order: Order,
     radius: i32,
 ) -> Result<OverviewLeaderboardResponse, GatewayError> {
-    let ugc_uuid = Uuid::from_str(&ugc_uuid)
+    let ugc_uuid = Uuid::from_str(&ugc_id)
         .map_err(|e| GatewayError::invalid_params(format!("invalid UGC UUID: {e}")))?;
 
     execute_overview_leaderboard(

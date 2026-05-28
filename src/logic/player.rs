@@ -120,7 +120,11 @@ pub async fn get_latest_played(
         combined.push((entry.completed_at, Fetched::Challenge(entry)));
     }
     for (entry, ugc_opt) in ugc_entries_with_ugc {
-        combined.push((entry.completed_at, Fetched::Ugc(entry, ugc_opt)));
+        if let Some(ref u) = ugc_opt
+            && (u.published || u.author_id == persona_id)
+        {
+            combined.push((entry.completed_at, Fetched::Ugc(entry, ugc_opt)));
+        }
     }
 
     // TODO: Only include specific Hackable Billboards that show up on the map

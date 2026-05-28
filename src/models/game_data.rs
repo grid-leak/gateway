@@ -314,3 +314,9 @@ pub struct ReplayUrlResponse {
     pub url: Option<String>,
     pub player_ghost: Option<PlayerGhost>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetUgcPublishedFlagResponse {
+    pub published: bool,
+}

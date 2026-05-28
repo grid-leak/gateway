@@ -113,7 +113,14 @@ pub async fn get_initial_game_data(
             }
         }
 
-        (reach_this_raw, time_trials_raw, random_ugc_raw, bookmarks_data, challenge_bookmarks, inventory)
+        (
+            reach_this_raw,
+            time_trials_raw,
+            random_ugc_raw,
+            bookmarks_data,
+            challenge_bookmarks,
+            inventory,
+        )
     };
 
     let mut all_ugc_ids: Vec<Uuid> = reach_this_raw
@@ -172,6 +179,9 @@ pub async fn get_initial_game_data(
         .into_iter()
         .filter_map(|(bm, ugc_opt)| {
             let entry = ugc_opt?;
+            if !entry.published && entry.author_id != persona_id {
+                return None;
+            }
             let author_name = bookmark_authors
                 .get(&entry.author_id)
                 .map(|s| s.as_str())
@@ -851,4 +861,51 @@ pub async fn get_time_trial_data(
     }
 
     Ok(responses)
+}
+
+pub async fn set_ugc_published_flag(
+    ctx: &GatewayContext,
+    persona_id: i32,
+    ugc_id: String,
+    published: bool,
+) -> Result<bool, GatewayError> {
+    let db = ctx.db();
+    let ugc_uuid = Uuid::from_str(&ugc_id)
+        .map_err(|_| GatewayError::invalid_params("invalid UGC UUID"))?;
+
+    let ugc_opt = ugc::Entity::find_by_id(ugc_uuid)
+        .one(db)
+        .await
+        .map_err(GatewayError::from)?;
+
+    let Some(ugc_model) = ugc_opt else {
+        return Err(GatewayError::game(GameErrorCode::NotFound, "UGC not found"));
+    };
+
+    if ugc_model.author_id != persona_id {
+        return Err(GatewayError::game(
+            GameErrorCode::UgcNotOwned,
+            "You do not own this UGC",
+        ));
+    }
+
+    if published && !ugc_model.published {
+        let limits = super::player::get_player_ugc_limits(ctx, persona_id).await?;
+        if limits.published_count >= limits.max_published {
+            return Err(GatewayError::game(
+                GameErrorCode::TooManyPublishedUgc,
+                "UGC publish limit reached",
+            ));
+        }
+    }
+
+    if ugc_model.published != published {
+        let now = Utc::now();
+        let mut active_model: ugc::ActiveModel = ugc_model.into();
+        active_model.published = Set(published);
+        active_model.updated_at = Set(now);
+        active_model.update(db).await.map_err(GatewayError::from)?;
+    }
+
+    Ok(published)
 }

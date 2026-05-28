@@ -6,7 +6,8 @@ use crate::{
         game_data::{
             Bookmarks, Division, Entry, HackableBillboardLeader, InitialGameDataResponse,
             Inventory, Item, Kit, LeaderboardResponse, OverviewLeaderboardResponse,
-            PlayerUgcLimits, PlayerUgcResponse, RunnersRouteData, UgcId, UgcMeta,
+            PlayerUgcLimits, PlayerUgcResponse, RunnersRouteData, SetUgcPublishedFlagResponse,
+            UgcId, UgcMeta,
         },
         ugc::{CreateReachThisMeta, CreateTimeTrialMeta},
     },
@@ -229,6 +230,14 @@ pub trait PamplonaAuthenticated {
         count: i64,
         offset: Option<i64>,
     ) -> RpcResult<LeaderboardResponse>;
+
+    #[method(name = "setUgcPublishedFlag", with_extensions)]
+    async fn set_ugc_published_flag(
+        &self,
+        ugc_type: String,
+        ugc_id: UgcId,
+        published: bool,
+    ) -> RpcResult<SetUgcPublishedFlagResponse>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -778,5 +787,56 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         )
         .await
         .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn set_ugc_published_flag(
+        &self,
+        extensions: &Extensions,
+        _ugc_type: String,
+        ugc_id: UgcId,
+        published: bool,
+    ) -> RpcResult<SetUgcPublishedFlagResponse> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        let is_published =
+            logic::ugc::set_ugc_published_flag(&self.ctx, persona_id, ugc_id.id, published)
+                .await
+                .map_err(GatewayError::into_rpc_err)?;
+
+        // Original server returns a unique and verbose object:
+        //     {
+        //     "id": "527f9d60-0c0e-11e7-be9b-5538b6410f02",
+        //     "eid": "1011786733",
+        //     "typeId": "ReachThis",
+        //     "data": {
+        //       "mapPosition_x": "-403.842",
+        //       "z": "372.927",
+        //       "qy": "-0.674854",
+        //       "mapPosition_z": "380.496",
+        //       "qx": "0.0",
+        //       "levelId": "-1940918635",
+        //       "y": "80.0552",
+        //       "name": "Fed9KoT #5",
+        //       "mapPosition_y": "80.0552",
+        //       "x": "-414.68",
+        //       "qw": "0.737952",
+        //       "qz": "0.0"
+        //     },
+        //     "createdAt": "1489864131129",
+        //     "updatedAt": "1489864131129",
+        //     "url": null,
+        //     "published": false,
+        //     "reported": false,
+        //     "blocked": false,
+        //     "_passthroughFields": {}
+        //   }
+
+        // Judging by the game's code, only the "published" key is read
+        // However, regardless of the response the game still doesn't
+        // update the status properly once you switch away and switch
+        // back to the UGC you just edited.
+
+        Ok(SetUgcPublishedFlagResponse {
+            published: is_published,
+        })
     }
 }

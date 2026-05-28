@@ -38,6 +38,7 @@ pub async fn get_bookmarks(
     let valid_ugcs: Vec<&ugc::Model> = ugc_bm_data
         .iter()
         .filter_map(|(_, ugc_opt)| ugc_opt.as_ref())
+        .filter(|u| u.published || u.author_id == persona_id)
         .collect();
 
     let ugc_ids: Vec<uuid::Uuid> = valid_ugcs.iter().map(|u| u.id).collect();
@@ -69,6 +70,9 @@ pub async fn get_bookmarks(
         .into_iter()
         .filter_map(|(bm, ugc_opt)| {
             let entry = ugc_opt?;
+            if !entry.published && entry.author_id != persona_id {
+                return None;
+            }
             let author = authors_map
                 .get(&entry.author_id)
                 .map(|s| s.as_str())
