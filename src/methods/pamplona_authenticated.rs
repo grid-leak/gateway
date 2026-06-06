@@ -6,8 +6,8 @@ use crate::{
         game_data::{
             Bookmarks, Division, Entry, HackableBillboardLeader, InitialGameDataResponse,
             Inventory, Item, Kit, LeaderboardResponse, OverviewLeaderboardResponse,
-            PlayerUgcLimits, PlayerUgcResponse, RunnersRouteData, SetUgcPublishedFlagResponse,
-            UgcId, UgcMeta,
+            PlayerUgcLimits, PlayerUgcResponse, ReachThisWrapper, RunnersRouteData,
+            SetUgcPublishedFlagResponse, TimeTrialWrapper, UgcId, UgcMeta,
         },
         ugc::{CreateReachThisMeta, CreateTimeTrialMeta},
     },
@@ -241,6 +241,20 @@ pub trait PamplonaAuthenticated {
 
     #[method(name = "deleteUGC", with_extensions)]
     async fn delete_ugc(&self, ugc_id: UgcId, ugc_type: String) -> RpcResult<String>;
+
+    #[method(name = "getTimeTrialData", with_extensions)]
+    async fn get_time_trial_data(
+        &self,
+        ugc_ids: Vec<UgcId>,
+        data_types: Vec<String>,
+    ) -> RpcResult<Vec<TimeTrialWrapper>>;
+
+    #[method(name = "getReachThisData", with_extensions)]
+    async fn get_reach_this_data(
+        &self,
+        ugc_ids: Vec<UgcId>,
+        data_types: Vec<String>,
+    ) -> RpcResult<Vec<ReachThisWrapper>>;
 }
 
 pub struct PamplonaAuthenticatedImpl {
@@ -857,5 +871,33 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
             .map_err(GatewayError::into_rpc_err)?;
 
         Ok("success".to_string())
+    }
+
+    async fn get_time_trial_data(
+        &self,
+        extensions: &Extensions,
+        ugc_ids: Vec<UgcId>,
+        data_types: Vec<String>,
+    ) -> RpcResult<Vec<TimeTrialWrapper>> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        let ugc_ids = ugc_ids.into_iter().map(|id| id.id).collect();
+
+        logic::ugc::get_time_trial_data(&self.ctx, ugc_ids, data_types, persona_id)
+            .await
+            .map_err(GatewayError::into_rpc_err)
+    }
+
+    async fn get_reach_this_data(
+        &self,
+        extensions: &Extensions,
+        ugc_ids: Vec<UgcId>,
+        data_types: Vec<String>,
+    ) -> RpcResult<Vec<ReachThisWrapper>> {
+        let persona_id = *extensions.get::<i32>().unwrap();
+        let ugc_ids = ugc_ids.into_iter().map(|id| id.id).collect();
+
+        logic::ugc::get_reach_this_data(&self.ctx, ugc_ids, data_types, persona_id)
+            .await
+            .map_err(GatewayError::into_rpc_err)
     }
 }
