@@ -4,7 +4,7 @@ use crate::{
     models::{
         customization::GhostDataInput,
         game_data::{
-            Bookmarks, Division, Entry, HackableBillboardLeader, InitialGameDataResponse,
+            Bookmarks, DataType, Division, Entry, HackableBillboardLeader, InitialGameDataResponse,
             Inventory, Item, Kit, LeaderboardResponse, OverviewLeaderboardResponse,
             PlayerUgcLimits, PlayerUgcResponse, ReachThisWrapper, RunnersRouteData,
             SetUgcPublishedFlagResponse, TimeTrialWrapper, UgcId, UgcMeta,
@@ -42,7 +42,7 @@ pub trait PamplonaAuthenticated {
     async fn get_runners_route_data(
         &self,
         challenge_ids: Vec<String>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
     ) -> RpcResult<Vec<RunnersRouteData>>;
 
     #[method(name = "getHackableBillboardFriendsLeaders", with_extensions)]
@@ -246,14 +246,14 @@ pub trait PamplonaAuthenticated {
     async fn get_time_trial_data(
         &self,
         ugc_ids: Vec<UgcId>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
     ) -> RpcResult<Vec<TimeTrialWrapper>>;
 
     #[method(name = "getReachThisData", with_extensions)]
     async fn get_reach_this_data(
         &self,
         ugc_ids: Vec<UgcId>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
     ) -> RpcResult<Vec<ReachThisWrapper>>;
 }
 
@@ -298,7 +298,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         &self,
         extensions: &Extensions,
         challenge_ids: Vec<String>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
     ) -> RpcResult<Vec<RunnersRouteData>> {
         let persona_id = *extensions.get::<i32>().unwrap();
         logic::challenge::get_runners_route_data(&self.ctx, challenge_ids, data_types, persona_id)
@@ -877,7 +877,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         &self,
         extensions: &Extensions,
         ugc_ids: Vec<UgcId>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
     ) -> RpcResult<Vec<TimeTrialWrapper>> {
         let persona_id = *extensions.get::<i32>().unwrap();
         let ugc_ids = ugc_ids.into_iter().map(|id| id.id).collect();
@@ -891,7 +891,7 @@ impl PamplonaAuthenticatedServer for PamplonaAuthenticatedImpl {
         &self,
         extensions: &Extensions,
         ugc_ids: Vec<UgcId>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
     ) -> RpcResult<Vec<ReachThisWrapper>> {
         let persona_id = *extensions.get::<i32>().unwrap();
         let ugc_ids = ugc_ids.into_iter().map(|id| id.id).collect();

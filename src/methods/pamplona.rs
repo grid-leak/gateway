@@ -10,8 +10,8 @@ use crate::{
     models::{
         customization::{PlayerGhost, PlayerTagResponse, TagData},
         game_data::{
-            Entry, LeaderboardResponse, PersonaId, PlayerInfo, PlayerUgcResponse, ReachThisWrapper,
-            ReplayUrlResponse, RunnersRouteData, TimeTrialWrapper, UgcId,
+            DataType, Entry, LeaderboardResponse, PersonaId, PlayerInfo, PlayerUgcResponse,
+            ReachThisWrapper, ReplayUrlResponse, RunnersRouteData, TimeTrialWrapper, UgcId,
         },
     },
 };
@@ -32,7 +32,7 @@ pub trait Pamplona {
     async fn get_runners_route_data(
         &self,
         challenge_ids: Vec<String>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
         persona_id: PersonaId,
     ) -> RpcResult<Vec<RunnersRouteData>>;
 
@@ -58,7 +58,7 @@ pub trait Pamplona {
     async fn get_reach_this_data(
         &self,
         ugc_ids: Vec<UgcId>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
         persona_id: PersonaId,
     ) -> RpcResult<Vec<ReachThisWrapper>>;
 
@@ -66,7 +66,7 @@ pub trait Pamplona {
     async fn get_time_trial_data(
         &self,
         ugc_ids: Vec<UgcId>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
         persona_id: PersonaId,
     ) -> RpcResult<Vec<TimeTrialWrapper>>;
 
@@ -150,7 +150,7 @@ impl PamplonaServer for PamplonaImpl {
     async fn get_runners_route_data(
         &self,
         challenge_ids: Vec<String>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
         persona_id: PersonaId,
     ) -> RpcResult<Vec<RunnersRouteData>> {
         get_runners_route_data(&self.ctx, challenge_ids, data_types, persona_id.into())
@@ -197,7 +197,7 @@ impl PamplonaServer for PamplonaImpl {
     async fn get_reach_this_data(
         &self,
         ugc_ids: Vec<UgcId>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
         persona_id: PersonaId,
     ) -> RpcResult<Vec<ReachThisWrapper>> {
         let ugc_ids = ugc_ids.into_iter().map(|id| id.id).collect();
@@ -210,7 +210,7 @@ impl PamplonaServer for PamplonaImpl {
     async fn get_time_trial_data(
         &self,
         ugc_ids: Vec<UgcId>,
-        data_types: Vec<String>,
+        data_types: Vec<DataType>,
         persona_id: PersonaId,
     ) -> RpcResult<Vec<TimeTrialWrapper>> {
         let ugc_ids = ugc_ids.into_iter().map(|id| id.id).collect();

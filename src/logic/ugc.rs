@@ -6,9 +6,9 @@ use crate::{
     },
     models::{
         game_data::{
-            Bookmarks, ChallengeBookmarkEntry, Division, InitialGameDataResponse, Inventory,
-            LEVEL_ID_HASH, PlayerInfo, PlayerUgcResponse, PromotedUgcWrapper, ReachThisWrapper,
-            TimeTrialWrapper, UgcBookmarkEntry, UgcMeta, UgcWrapper, UserRank,
+            Bookmarks, ChallengeBookmarkEntry, DataType, Division, InitialGameDataResponse,
+            Inventory, LEVEL_ID_HASH, PlayerInfo, PlayerUgcResponse, PromotedUgcWrapper,
+            ReachThisWrapper, TimeTrialWrapper, UgcBookmarkEntry, UgcMeta, UgcWrapper, UserRank,
         },
         ugc::{CreateReachThisMeta, CreateTimeTrialMeta},
         user_stats::{ReachThisUserStats, TimeTrialUserStats, UgcEntryUserStats},
@@ -552,7 +552,7 @@ struct UgcCountResult {
 pub async fn get_reach_this_data(
     ctx: &GatewayContext,
     ugc_ids: Vec<String>,
-    data_types: Vec<String>,
+    data_types: Vec<DataType>,
     persona_id: i32,
 ) -> Result<Vec<ReachThisWrapper>, GatewayError> {
     if ugc_ids.is_empty() {
@@ -570,7 +570,7 @@ pub async fn get_reach_this_data(
     let mut user_ranks_map = HashMap::new();
     let mut totals_map = HashMap::new();
 
-    if data_types.iter().any(|s| s == "USER_STATS") {
+    if data_types.contains(&DataType::UserStats) {
         let user_entries = ugc_entries::Entity::find()
             .filter(ugc_entries::Column::UserId.eq(persona_id))
             .filter(ugc_entries::Column::UgcId.is_in(requested_ids.iter().copied()))
@@ -652,7 +652,7 @@ pub async fn get_reach_this_data(
     }
 
     let mut meta_map = HashMap::new();
-    if data_types.iter().any(|s| s == "META") {
+    if data_types.contains(&DataType::Meta) {
         let ugc_rows = ugc::Entity::find()
             .filter(ugc::Column::Id.is_in(requested_ids.iter().copied()))
             .find_also_related(users::Entity)
@@ -707,7 +707,7 @@ pub async fn get_reach_this_data(
 pub async fn get_time_trial_data(
     ctx: &GatewayContext,
     ugc_ids: Vec<String>,
-    data_types: Vec<String>,
+    data_types: Vec<DataType>,
     persona_id: i32,
 ) -> Result<Vec<TimeTrialWrapper>, GatewayError> {
     if ugc_ids.is_empty() {
@@ -725,7 +725,7 @@ pub async fn get_time_trial_data(
     let mut user_ranks_map = HashMap::new();
     let mut totals_map = HashMap::new();
 
-    if data_types.iter().any(|s| s == "USER_STATS") {
+    if data_types.contains(&DataType::UserStats) {
         let user_entries = ugc_entries::Entity::find()
             .filter(ugc_entries::Column::UserId.eq(persona_id))
             .filter(ugc_entries::Column::UgcId.is_in(requested_ids.iter().copied()))
@@ -807,7 +807,7 @@ pub async fn get_time_trial_data(
     }
 
     let mut meta_map = HashMap::new();
-    if data_types.iter().any(|s| s == "META") {
+    if data_types.contains(&DataType::Meta) {
         let ugc_rows = ugc::Entity::find()
             .filter(ugc::Column::Id.is_in(requested_ids.iter().copied()))
             .find_also_related(users::Entity)

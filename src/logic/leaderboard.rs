@@ -134,7 +134,7 @@ where
     E::Model: HasScore + sea_orm::FromQueryResult + Sized + Send + Sync + 'static,
 {
     let offset = offset.max(0);
-    let count = count.max(0);
+    let count = count.clamp(0, 100);
 
     let global_count = base_query.clone().count(db).await? as i64;
 
@@ -184,7 +184,7 @@ where
     E: EntityTrait + Related<users::Entity>,
     E::Model: HasScore + sea_orm::FromQueryResult + Sized + Send + Sync + 'static,
 {
-    let radius = radius.max(0) as i64;
+    let radius = radius.clamp(0, 10) as i64;
 
     let user_entry = base_query
         .clone()

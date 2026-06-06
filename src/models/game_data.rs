@@ -320,3 +320,16 @@ pub struct ReplayUrlResponse {
 pub struct SetUgcPublishedFlagResponse {
     pub published: bool,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DataType {
+    #[serde(rename = "META")]
+    Meta,
+    #[serde(rename = "STATS")]
+    Stats,
+    #[serde(rename = "USER_STATS")]
+    UserStats,
+    // Unused, but technically possible
+    #[serde(rename = "EMBLEM_URL")]
+    EmblemUrl,
+}

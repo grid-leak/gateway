@@ -2,7 +2,7 @@ use crate::{
     context::GatewayContext,
     logic::GatewayError,
     models::{
-        game_data::{Division, HackableBillboardLeader, RunnersRouteData, UserRank},
+        game_data::{DataType, Division, HackableBillboardLeader, RunnersRouteData, UserRank},
         user_stats::{ChallengeEntryUserStats, HackableBillboardUserStats, RunnersRouteUserStats},
     },
 };
@@ -168,7 +168,7 @@ struct CountResult {
 pub async fn get_runners_route_data(
     ctx: &GatewayContext,
     challenge_ids: Vec<String>,
-    _data_types: Vec<String>,
+    _data_types: Vec<DataType>,
     persona_id: i32,
 ) -> Result<Vec<RunnersRouteData>, GatewayError> {
     if challenge_ids.is_empty() {
