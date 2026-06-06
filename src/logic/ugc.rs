@@ -279,11 +279,14 @@ pub async fn create_reach_this(
             "UGC creation limit reached",
         ));
     }
-    if reach_this.published && limits.published_count >= limits.max_published {
-        return Err(GatewayError::game(
-            GameErrorCode::TooManyPublishedUgc,
-            "UGC publish limit reached",
-        ));
+
+    // When the user hits the UGC limit, the game prompts
+    // them to publish the Beat LE as unlisted. However,
+    // the request is still sent as published: true
+    // which requires this workaround
+    let mut published = reach_this.published;
+    if published && limits.published_count >= limits.max_published {
+        published = false;
     }
 
     let user = ctx.user(author_id).await?;
@@ -299,7 +302,7 @@ pub async fn create_reach_this(
         r#type: Set(UgcType::ReachThis),
         created_at: Set(now),
         updated_at: Set(now),
-        published: Set(reach_this.published),
+        published: Set(published),
         x: Set(transform.x),
         y: Set(transform.y),
         z: Set(transform.z),
